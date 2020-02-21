@@ -1,6 +1,7 @@
 [submodule "components/clm/src/external_models/fates"]
 	path = components/clm/src/external_models/fates
-	url = git@github.com:NGEET/fates.git
+	url = git@github.com:aldivi/fates.git
+	branch = aldivi/elm/fates-harvest
 [submodule "alm-mpp"]
 	path = components/clm/src/external_models/mpp
 	url = git@github.com:MPP-LSM/MPP.git
