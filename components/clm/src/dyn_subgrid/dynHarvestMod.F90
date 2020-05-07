@@ -42,6 +42,17 @@ module dynHarvestMod
   public :: dynHarvest_interp  ! get harvest data for current time step, if needed
   public :: CNHarvest          ! harvest mortality routine for CN code
   !
+
+  ! !PUBLIC VARIABLES:
+  ! these are now public so that they can be passed to FATES
+  real(r8) , public, allocatable   :: harvest(:) ! harvest rates
+  logical , public                 :: do_harvest ! whether we're in a period when we should do harvest
+  ! only one of these can be true at one time; they must match the harvest_varnames below
+  ! they are false if do_harvest namelist is not set
+  ! reset these in dynHarvest_init because it is called only if harvest is active
+  logical, public                  :: wood_harvest_area = .false. ! denotes harvest in area units
+  logical, public                  :: wood_harvest_c = .false. ! denotes harvest in carbon units
+
   ! !PRIVATE MEMBER FUNCTIONS:
   private :: CNHarvestPftToColumn   ! gather pft-level harvest fluxes to the column level
   !
@@ -53,14 +64,17 @@ module dynHarvestMod
   type(dyn_file_type), target :: dynHarvest_file ! information for the file containing harvest data
 
   ! Define the underlying harvest variables
+  ! these are fraction of vegetated area harvested, split into five categories
+  ! note that these are applied to total forest area only, as a whole, in CNHarvest
+  ! these data will be passed to FATES as is
+  ! capacity for harvest data in units of carbon per cell has been added here
   integer, parameter :: num_harvest_vars = 5
   character(len=64), parameter :: harvest_varnames(num_harvest_vars) = &
        [character(len=64) :: 'HARVEST_VH1', 'HARVEST_VH2', 'HARVEST_SH1', 'HARVEST_SH2', 'HARVEST_SH3']
   
   type(dyn_var_time_uninterp_type) :: harvest_vars(num_harvest_vars)   ! value of each harvest variable
 
-  real(r8) , allocatable   :: harvest(:) ! harvest rates
-  logical                  :: do_harvest ! whether we're in a period when we should do harvest
+
   !---------------------------------------------------------------------------
 
 contains
@@ -75,7 +89,7 @@ contains
     ! This also calls dynHarvest_interp for the initial time
     !
     ! !USES:
-    use clm_varctl            , only : use_cn
+    use clm_varctl            , only : use_cn, use_fates
     use dynVarTimeUninterpMod , only : dyn_var_time_uninterp_type
     use dynTimeInfoMod        , only : YEAR_POSITION_START_OF_TIMESTEP
     use dynTimeInfoMod        , only : YEAR_POSITION_END_OF_TIMESTEP
@@ -103,7 +117,7 @@ contains
     dynHarvest_file = dyn_file_type(harvest_filename, YEAR_POSITION_END_OF_TIMESTEP)
     
     ! Get initial harvest data
-    if (use_cn) then
+    if (use_cn or. use_fates) then
        num_points = (bounds%endg - bounds%begg + 1)
        do varnum = 1, num_harvest_vars
           harvest_vars(varnum) = dyn_var_time_uninterp_type( &
@@ -113,7 +127,12 @@ contains
        end do
        call dynHarvest_interp(bounds)
     end if
-    
+
+   ! only one can be true at a time
+   ! these must match the harvest_varnames above
+   wood_harvest_area = .true. ! denotes harvest in area units
+   wood_harvest_c = .false. ! denotes harvest in carbon units
+
   end subroutine dynHarvest_init
 
 
@@ -130,7 +149,7 @@ contains
     ! year, with abrupt changes in the rate at annual boundaries.
     !
     ! !USES:
-    use clm_varctl     , only : use_cn
+    use clm_varctl     , only : use_cn, use_fates
     use dynTimeInfoMod , only : time_info_type
     !
     ! !ARGUMENTS:
@@ -150,7 +169,7 @@ contains
     call dynHarvest_file%time_info%set_current_year_get_year()
 
     ! Get total harvest for this time step
-    if (use_cn) then
+    if (use_cn .or. use_fates) then
        harvest(bounds%begg:bounds%endg) = 0._r8
 
        if (dynHarvest_file%time_info%is_before_time_series()) then

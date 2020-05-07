@@ -34,7 +34,7 @@ module CLMFatesInterfaceMod
    ! Used CLM Modules
    use VegetationType    , only : veg_pp
    use shr_kind_mod      , only : r8 => shr_kind_r8
-   use decompMod         , only : bounds_type
+   use decompMod         , only : bounds_type, BOUNDS_LEVEL_PROC
    use WaterStateType    , only : waterstate_type
    use WaterFluxType     , only : waterflux_type
    use CanopyStateType   , only : canopystate_type
@@ -136,6 +136,7 @@ module CLMFatesInterfaceMod
    use FatesPlantHydraulicsMod, only : UpdateH2OVeg
    use FatesPlantHydraulicsMod, only : RestartHydrStates
    use FatesInterfaceMod      , only : bc_in_type, bc_out_type
+   use dynHarvestMod, only : harvest, do_harvest ! these are dynamic in space and time
 
    implicit none
    
@@ -233,7 +234,8 @@ contains
       use FatesInterfaceMod, only : FatesReportParameters
       use FatesParameterDerivedMod, only : param_derived
       use FatesInterfaceMod, only : numpft_fates => numpft
-
+      use dynHarvestMod, only : wood_harvest_area, wood_harvest_c ! these are static
+      use dynSubgridControlMod, only : get_do_harvest ! this gets the namelist value
 
 
       implicit none
@@ -249,6 +251,8 @@ contains
       integer                                        :: pass_vertsoilc
       integer                                        :: pass_spitfire     
       integer                                        :: pass_ed_st3
+      integer                                        :: pass_harvest_area
+      integer                                        :: pass_harvest_c
       integer                                        :: pass_logging
       integer                                        :: pass_ed_prescribed_phys
       integer                                        :: pass_planthydro
@@ -264,6 +268,9 @@ contains
       type(bounds_type)                              :: bounds_clump
       integer                                        :: nmaxcol
       integer                                        :: ndecomp
+      type(bounds_type)                              :: harvest_bounds
+      character(len=*), parameter :: subname = 'dynHarvest_init'
+      !-----------------------------------------------------------------------
 
       ! Initialize the FATES communicators with the HLM
       ! This involves to stages
@@ -327,12 +334,36 @@ contains
          pass_ed_st3 = 0
       end if
       call set_fates_ctrlparms('use_ed_st3',ival=pass_ed_st3)
-      
+
+      ! check fates logging namelist value first because hlm harvest overrides it
       if(use_fates_logging) then
          pass_logging = 1
       else
          pass_logging = 0
       end if
+
+      if(get_do_harvest() .and. wood_harvest_area) then
+         pass_harvest_area = 1
+         pass_logging = 1
+      else
+         pass_harvest_area = 0
+      end if
+
+      if(get_do_harvest() .and. wood_harvest_c) then
+         pass_harvest_c = 1
+         pass_logging = 1
+      else
+         pass_harvest_c = 0
+      end if
+
+      ! make sure that only one of the harvest unit options are true
+      if( pass_harvest_area .eq. 1 .and. pass_harvest_c .eq. 1 ) then
+         write(iulog,*) 'Cannot pass both harvest area and harvest c to FATES'
+         call endrun(msg=errMsg(sourcefile, __LINE__))
+      end if
+
+      call set_fates_ctrlparms('use_harvest_area',ival=pass_harvest_area)
+      call set_fates_ctrlparms('use_harvest_c',ival=pass_harvest_c)
       call set_fates_ctrlparms('use_logging',ival=pass_logging)
 
       if(use_fates_ed_prescribed_phys) then
@@ -445,7 +476,10 @@ contains
          ! Allocate and Initialize the Boundary Condition Arrays
          ! These are staticaly allocated at maximums, so
          ! No information about the patch or cohort structure is needed at this step
-         
+
+         ! to get bounds for the harvest data
+         SHR_ASSERT_ALL(bounds%level == BOUNDS_LEVEL_PROC, subname // ': argument must be PROC-level bounds')
+
          do s = 1, this%fates(nc)%nsites
 
             c = this%f2hmap(nc)%fcolumn(s)
@@ -456,7 +490,7 @@ contains
                ndecomp = 1
             end if
 
-            call allocate_bcin(this%fates(nc)%bc_in(s),col_pp%nlevbed(c),ndecomp)
+            call allocate_bcin(this%fates(nc)%bc_in(s),col_pp%nlevbed(c),ndecomp, harvest_bounds)
             call allocate_bcout(this%fates(nc)%bc_out(s),col_pp%nlevbed(c),ndecomp)
             
             call this%fates(nc)%zero_bcs(s)
@@ -673,6 +707,14 @@ contains
             this%fates(nc)%bc_in(s)%h2o_liq_sisl(1:nlevsoil) =  col_ws%h2osoi_liq(c,1:nlevsoil)
          end if
          
+         ! get the harvest data, which is by gridcell
+         ! not yet sure if nc represents one cell or a group of cells
+! todo: add these to the bc_in structure and make sure any initialization of them is done
+         ! today's hlm harvest flag needs to be passed no matter what
+         this%fates(nc)%bc_in(s)%hlm_do_harvest_today = do_harvest
+         if (do_harvest) then
+            this%fates(nc)%bc_in(s)%hlm_harvest = harvest
+         end if
 
       end do
 
@@ -681,6 +723,7 @@ contains
       ! provided.
       ! ---------------------------------------------------------------------------------
 
+      ! why is this a separate loop?
       do s = 1,this%fates(nc)%nsites
 
             call ed_ecosystem_dynamics(this%fates(nc)%sites(s),    &

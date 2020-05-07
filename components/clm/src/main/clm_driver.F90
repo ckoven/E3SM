@@ -1058,9 +1058,9 @@ contains
                      waterstate_vars, canopystate_vars)
              end if
 
-          end if  ! end of if-use_cn
-          end if ! end of is_active_betr_bgc
-        end if  ! end of if-use_fates
+          end if  ! end of if use_cn
+          end if ! end of if not is_active_betr_bgc
+        end if  ! end of if not use_fates
 
     
 

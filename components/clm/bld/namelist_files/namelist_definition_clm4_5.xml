@@ -1664,7 +1664,7 @@ If TRUE, apply transient crops from flanduse_timeseries file.
        group="dynamic_subgrid" valid_values="" >
 If TRUE, apply harvest from flanduse_timeseries file.
 (Only valid for transient runs, where there is a flanduse_timeseries file.)
-(Also, only valid for use_cn = true.)
+(Also, only valid for use_cn = true OR for use_fates  = true.)
 </entry>
 
 <!-- ========================================================================================  -->
