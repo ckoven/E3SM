@@ -172,7 +172,7 @@ contains
     use dynConsBiogeophysMod , only : dyn_hwcontent_init, dyn_hwcontent_final
     use dynConsBiogeochemMod , only : dyn_cnbal_patch, dyn_cnbal_column
     use dynpftFileMod        , only : dynpft_interp
-    use dynHarvestMod        , only : dynHarvest_interp
+    use dynHarvestMod        , only : dynHarvest_interp_categories
     use dynEDMod             , only : dyn_ED
     use reweightMod          , only : reweight_wrapup
     use subgridWeightsMod    , only : compute_higher_order_weights, set_subgrid_diagnostic_fields
@@ -259,8 +259,8 @@ contains
     end if
 
     if (get_do_harvest()) then
-       call dynHarvest_interp(bounds_proc)
-    end if
+      call dynHarvest_interp_categories(bounds_proc)
+   end if
 
     ! ==========================================================================
     ! Do everything else related to land cover change

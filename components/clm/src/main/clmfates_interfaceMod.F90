@@ -136,7 +136,8 @@ module CLMFatesInterfaceMod
    use FatesPlantHydraulicsMod, only : UpdateH2OVeg
    use FatesPlantHydraulicsMod, only : RestartHydrStates
    use FatesInterfaceMod      , only : bc_in_type, bc_out_type
-   use dynHarvestMod, only : harvest, do_harvest ! these are dynamic in space and time
+   use dynHarvestMod, only : harvest_rates, do_harvest ! these are dynamic in space and time
+   use dynHarvestMod, only : num_harvest_cats
 
    implicit none
    
@@ -251,8 +252,8 @@ contains
       integer                                        :: pass_vertsoilc
       integer                                        :: pass_spitfire     
       integer                                        :: pass_ed_st3
-      integer                                        :: pass_harvest_area
-      integer                                        :: pass_harvest_c
+      integer                                        :: pass_lu_harvest
+      integer                                        :: pass_num_lu_harvest_cats
       integer                                        :: pass_logging
       integer                                        :: pass_ed_prescribed_phys
       integer                                        :: pass_planthydro
@@ -268,8 +269,6 @@ contains
       type(bounds_type)                              :: bounds_clump
       integer                                        :: nmaxcol
       integer                                        :: ndecomp
-      type(bounds_type)                              :: harvest_bounds
-      character(len=*), parameter :: subname = 'dynHarvest_init'
       !-----------------------------------------------------------------------
 
       ! Initialize the FATES communicators with the HLM
@@ -343,27 +342,20 @@ contains
       end if
 
       if(get_do_harvest() .and. wood_harvest_area) then
-         pass_harvest_area = 1
+         pass_lu_harvest = 1
+         pass_num_lu_harvest_cats = num_harvest_cats
+         pass_logging = 1
+      else if(get_do_harvest() .and. wood_harvest_c) then
+         pass_lu_harvest = 2
+         pass_num_lu_harvest_cats = num_harvest_cats
          pass_logging = 1
       else
-         pass_harvest_area = 0
+         pass_lu_harvest = 0
+         pass_num_lu_harvest_cats = 0
       end if
 
-      if(get_do_harvest() .and. wood_harvest_c) then
-         pass_harvest_c = 1
-         pass_logging = 1
-      else
-         pass_harvest_c = 0
-      end if
-
-      ! make sure that only one of the harvest unit options are true
-      if( pass_harvest_area .eq. 1 .and. pass_harvest_c .eq. 1 ) then
-         write(iulog,*) 'Cannot pass both harvest area and harvest c to FATES'
-         call endrun(msg=errMsg(sourcefile, __LINE__))
-      end if
-
-      call set_fates_ctrlparms('use_harvest_area',ival=pass_harvest_area)
-      call set_fates_ctrlparms('use_harvest_c',ival=pass_harvest_c)
+      call set_fates_ctrlparms('use_lu_harvest',ival=pass_lu_harvest)
+      call set_fates_ctrlparms('use_num_lu_harvest_cats',ival=pass_num_lu_harvest_cats)
       call set_fates_ctrlparms('use_logging',ival=pass_logging)
 
       if(use_fates_ed_prescribed_phys) then
@@ -405,8 +397,8 @@ contains
          write(iulog,*) 'alm_fates%init():  allocating for ',nclumps,' threads'
       end if
 
-      
-      nclumps = get_proc_clumps()
+! todo: this is redundant
+      !nclumps = get_proc_clumps()
 
       !$OMP PARALLEL DO PRIVATE (nc,bounds_clump,nmaxcol,s,c,l,g,collist,pi,pf)
       do nc = 1,nclumps
@@ -477,9 +469,6 @@ contains
          ! These are staticaly allocated at maximums, so
          ! No information about the patch or cohort structure is needed at this step
 
-         ! to get bounds for the harvest data
-         SHR_ASSERT_ALL(bounds%level == BOUNDS_LEVEL_PROC, subname // ': argument must be PROC-level bounds')
-
          do s = 1, this%fates(nc)%nsites
 
             c = this%f2hmap(nc)%fcolumn(s)
@@ -490,7 +479,7 @@ contains
                ndecomp = 1
             end if
 
-            call allocate_bcin(this%fates(nc)%bc_in(s),col_pp%nlevbed(c),ndecomp, harvest_bounds)
+            call allocate_bcin(this%fates(nc)%bc_in(s),col_pp%nlevbed(c),ndecomp, num_harvest_cats)
             call allocate_bcout(this%fates(nc)%bc_out(s),col_pp%nlevbed(c),ndecomp)
             
             call this%fates(nc)%zero_bcs(s)
@@ -615,6 +604,7 @@ contains
       integer  :: s                        ! site index
       integer  :: c                        ! column index (HLM)
       integer  :: t                        ! topounit index (HLM)
+      integer  :: g                        ! HLM grid index
       integer  :: ifp                      ! patch index
       integer  :: p                        ! HLM patch index
       integer  :: nc                       ! clump index
@@ -706,14 +696,16 @@ contains
             this%fates(nc)%bc_in(s)%bsw_sisl(1:nlevsoil)    = soilstate_inst%bsw_col(c,1:nlevsoil)
             this%fates(nc)%bc_in(s)%h2o_liq_sisl(1:nlevsoil) =  col_ws%h2osoi_liq(c,1:nlevsoil)
          end if
-         
+
          ! get the harvest data, which is by gridcell
-         ! not yet sure if nc represents one cell or a group of cells
-! todo: add these to the bc_in structure and make sure any initialization of them is done
-         ! today's hlm harvest flag needs to be passed no matter what
+         ! for now there is one veg column per gridcell, so store all harvest data in each site
+         ! this will eventually change
+         ! today's hlm harvest flag needs to be set no matter what
+         g = col_pp%gridcell(c)
          this%fates(nc)%bc_in(s)%hlm_do_harvest_today = do_harvest
          if (do_harvest) then
-            this%fates(nc)%bc_in(s)%hlm_harvest = harvest
+            this%fates(nc)%bc_in(s)%hlm_harvest = harvest_rates(:,g)
+            this%fates(nc)%bc_in(s)%hlm_harvest_catnames = harvest_catnames
          end if
 
       end do
