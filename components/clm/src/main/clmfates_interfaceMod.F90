@@ -52,6 +52,7 @@ module CLMFatesInterfaceMod
    use clm_varctl        , only : use_fates_logging
    use clm_varctl        , only : use_fates_inventory_init
    use clm_varctl        , only : fates_inventory_ctrl_filename
+   use clm_varctl        , only : nsrest, nsrBranch
    use clm_varcon        , only : tfrz
    use clm_varcon        , only : spval 
    use clm_varcon        , only : denice
@@ -137,7 +138,7 @@ module CLMFatesInterfaceMod
    use FatesPlantHydraulicsMod, only : RestartHydrStates
    use FatesInterfaceMod      , only : bc_in_type, bc_out_type
    use dynHarvestMod, only : harvest_rates, do_harvest ! these are dynamic in space and time
-   use dynHarvestMod, only : num_harvest_cats
+   use dynHarvestMod, only : num_harvest_cats, harvest_catnames
 
    implicit none
    
@@ -235,7 +236,7 @@ contains
       use FatesInterfaceMod, only : FatesReportParameters
       use FatesParameterDerivedMod, only : param_derived
       use FatesInterfaceMod, only : numpft_fates => numpft
-      use dynHarvestMod, only : wood_harvest_area, wood_harvest_c ! these are static
+      use dynHarvestMod, only : wood_harvest_units, harvest_area_fraction, harvest_carbon
       use dynSubgridControlMod, only : get_do_harvest ! this gets the namelist value
 
 
@@ -306,7 +307,7 @@ contains
                                                                           ! THE BARE SOIL PATCH
       call set_fates_ctrlparms('parteh_mode',ival=fates_parteh_mode)
 
-      if(is_restart()) then
+      if(is_restart() .or. nsrest .eq. nsrBranch) then
          pass_is_restart = 1
       else
          pass_is_restart = 0
@@ -341,21 +342,21 @@ contains
          pass_logging = 0
       end if
 
-      if(get_do_harvest() .and. wood_harvest_area) then
-         pass_lu_harvest = 1
-         pass_num_lu_harvest_cats = num_harvest_cats
+      if(get_do_harvest()) then
          pass_logging = 1
-      else if(get_do_harvest() .and. wood_harvest_c) then
-         pass_lu_harvest = 2
          pass_num_lu_harvest_cats = num_harvest_cats
-         pass_logging = 1
+         if (wood_harvest_units .eq. harvest_area_fraction) then
+            pass_lu_harvest = 1
+         else if (wood_harvest_units .eq. harvest_area_carbon) then
+            pass_lu_harvest = 2
+         end if
       else
          pass_lu_harvest = 0
          pass_num_lu_harvest_cats = 0
       end if
 
       call set_fates_ctrlparms('use_lu_harvest',ival=pass_lu_harvest)
-      call set_fates_ctrlparms('use_num_lu_harvest_cats',ival=pass_num_lu_harvest_cats)
+      call set_fates_ctrlparms('num_lu_harvest_cats',ival=pass_num_lu_harvest_cats)
       call set_fates_ctrlparms('use_logging',ival=pass_logging)
 
       if(use_fates_ed_prescribed_phys) then
@@ -396,9 +397,6 @@ contains
       if(debug)then
          write(iulog,*) 'alm_fates%init():  allocating for ',nclumps,' threads'
       end if
-
-! todo: this is redundant
-      !nclumps = get_proc_clumps()
 
       !$OMP PARALLEL DO PRIVATE (nc,bounds_clump,nmaxcol,s,c,l,g,collist,pi,pf)
       do nc = 1,nclumps

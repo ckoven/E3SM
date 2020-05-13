@@ -36,7 +36,6 @@ module dynHarvestMod
   !
   ! !PUBLIC MEMBER FUNCTIONS:
   implicit none
-  private
   save
   public :: dynHarvest_init    ! initialize data structures for harvest information
   public :: dynHarvest_interp  ! get summed harvest data for current time step, if needed
@@ -58,29 +57,31 @@ module dynHarvestMod
   ! the individual category rates are passed to fates in harvest_rates(:,:)
   ! capacity for harvest data in units of carbon per cell has been added
   integer, parameter :: num_harvest_cats = 5
-  real(r8) , allocatable   :: harvest(:) ! sum of harvest category rates in each gridcell
+  !real(r8) , allocatable   :: harvest(:) ! sum of harvest category rates in each gridcell (not used)
   real(r8) , allocatable   :: harvest_rates(:,:) ! category harvest rates (d1) in each gridcell (d2)
   character(len=64), parameter :: harvest_catnames(num_harvest_cats) = &
   [character(len=64) :: 'HARVEST_VH1', 'HARVEST_VH2', 'HARVEST_SH1', 'HARVEST_SH2', 'HARVEST_SH3']
   logical :: do_harvest ! whether we're in a period when we should do harvest
-  ! only one of these can be true at one time; they must match the units of harvest_catnames below
-  ! they are false if do_harvest namelist is not set
-  ! reset these in dynHarvest_init because it is called only if harvest is active
-  logical :: wood_harvest_area = .false. ! denotes harvest in area units
-  logical :: wood_harvest_c = .false. ! denotes harvest in carbon units
-
-  ! this is used only in this module
-  type(dyn_var_time_uninterp_type) :: harvest_cats(num_harvest_cats)   ! value of each harvest variable
+  ! the units flag must match the units of harvest_catnames above
+  ! set this in dynHarvest_init because it is called only if namelist do_harvest is TRUE
+  ! and this flag is accessed only if namelist do_harvest is TRUE
+  integer :: wood_harvest_units  ! 1 = harvest in area fraction units
+                                 ! 2 = harvest in carbon units
+  integer, parameter :: harvest_area_fraction = 1
+  integer, parameter :: harvest_carbon = 2
 
 ! !PRIVATE MEMBER FUNCTIONS:
   private :: CNHarvestPftToColumn   ! gather pft-level harvest fluxes to the column level
   !
   ! !PRIVATE TYPES:
 
+  ! this is used only in this module
+  type(dyn_var_time_uninterp_type), private :: harvest_cats(num_harvest_cats)   ! value of each harvest variable
+
   ! Note that, since we have our own dynHarvest_file object (distinct from dynpft_file),
   ! we could theoretically have a separate file providing harvest data from that providing
   ! the pftdyn data
-  type(dyn_file_type), target :: dynHarvest_file ! information for the file containing harvest data
+  type(dyn_file_type), target, private :: dynHarvest_file ! information for the file containing harvest data
 
   !---------------------------------------------------------------------------
 
@@ -93,7 +94,7 @@ contains
     ! Initialize data structures for harvest information.
     ! This should be called once, during model initialization.
     ! 
-    ! This also calls dynHarvest_interp for the initial time
+    ! This also calls dynHarvest_interp_categories for the initial time
     !
     ! !USES:
     use clm_varctl            , only : use_cn, use_fates
@@ -115,16 +116,17 @@ contains
 
     SHR_ASSERT_ALL(bounds%level == BOUNDS_LEVEL_PROC, subname // ': argument must be PROC-level bounds')
 
-    allocate(harvest(bounds%begg:bounds%endg),stat=ier)
+    allocate(harvest_rates(1:num_harvest_cats,bounds%begg:bounds%endg),stat=ier)
+    !allocate(harvest(bounds%begg:bounds%endg),stat=ier)
     if (ier /= 0) then
-       call endrun(msg=' allocation error for harvest'//errMsg(__FILE__, __LINE__))
+       call endrun(msg=' allocation error for harvest_rates'//errMsg(__FILE__, __LINE__))
     end if
 
     !dynHarvest_file = dyn_file_type(harvest_filename, YEAR_POSITION_START_OF_TIMESTEP)
     dynHarvest_file = dyn_file_type(harvest_filename, YEAR_POSITION_END_OF_TIMESTEP)
     
     ! Get initial harvest data
-    if (use_cn or. use_fates) then
+    if (use_cn .or. use_fates) then
        num_points = (bounds%endg - bounds%begg + 1)
        do varnum = 1, num_harvest_cats
           harvest_cats(varnum) = dyn_var_time_uninterp_type( &
@@ -136,14 +138,16 @@ contains
 
     ! only one can be true at a time
     ! these must match the units of harvest_catnames above
-    wood_harvest_area = .true. ! denotes harvest in area units
-    wood_harvest_c = .false. ! denotes harvest in carbon units
+     wood_harvest_units = harvest_area_fraction
+
 
     end if
 
   end subroutine dynHarvest_init
 
   !-----------------------------------------------------------------------
+  ! this function has been replaced by dynHarvest_interp_categories() below
+  ! CNHarvest() has been modified to sum the category values
   subroutine dynHarvest_interp(bounds)
     !
     ! !DESCRIPTION:
@@ -177,7 +181,7 @@ contains
     call dynHarvest_file%time_info%set_current_year_get_year()
 
     ! Get total harvest for this time step
-    if (use_cn or. use_fates) then
+    if (use_cn .or. use_fates) then
        harvest(bounds%begg:bounds%endg) = 0._r8
 
        if (dynHarvest_file%time_info%is_before_time_series()) then
@@ -231,7 +235,7 @@ contains
       SHR_ASSERT_ALL(bounds%level == BOUNDS_LEVEL_PROC, subname // ': argument must be PROC-level bounds')
 
       call dynHarvest_file%time_info%set_current_year_get_year()
-      if (use_cn or. use_fates) then
+      if (use_cn .or. use_fates) then
          harvest_rates(1:num_harvest_cats,bounds%begg:bounds%endg) = 0._r8
          if (dynHarvest_file%time_info%is_before_time_series()) then
             ! Turn off harvest before the start of the harvest time series
@@ -285,6 +289,7 @@ contains
     real(r8):: am                        ! rate for fractional harvest mortality (1/yr)
     real(r8):: m                         ! rate for fractional harvest mortality (1/s)
     real(r8):: days_per_year             ! days per year
+    integer :: varnum                    ! counter for harvest variables
     !-----------------------------------------------------------------------
 
    associate(& 
