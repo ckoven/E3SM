@@ -57,18 +57,18 @@ module dynHarvestMod
   ! the individual category rates are passed to fates in harvest_rates(:,:)
   ! capacity for harvest data in units of carbon per cell has been added
   integer, parameter :: num_harvest_cats = 5
-  !real(r8) , allocatable   :: harvest(:) ! sum of harvest category rates in each gridcell (not used)
+  real(r8) , allocatable   :: harvest(:) ! sum of harvest category rates in each gridcell (not used)
   real(r8) , allocatable   :: harvest_rates(:,:) ! category harvest rates (d1) in each gridcell (d2)
   character(len=64), parameter :: harvest_catnames(num_harvest_cats) = &
   [character(len=64) :: 'HARVEST_VH1', 'HARVEST_VH2', 'HARVEST_SH1', 'HARVEST_SH2', 'HARVEST_SH3']
   logical :: do_harvest ! whether we're in a period when we should do harvest
   ! the units flag must match the units of harvest_catnames above
-  ! set this in dynHarvest_init because it is called only if namelist do_harvest is TRUE
-  ! and this flag is accessed only if namelist do_harvest is TRUE
-  integer :: wood_harvest_units  ! 1 = harvest in area fraction units
-                                 ! 2 = harvest in carbon units
+  ! set this here because dynHarvest_init is called after alm_fates%init
+  ! this flag is accessed only if namelist do_harvest is TRUE
   integer, parameter :: harvest_area_fraction = 1
   integer, parameter :: harvest_carbon = 2
+   integer :: wood_harvest_units = harvest_area_fraction ! 1 = harvest in area fraction units
+                                                         ! 2 = harvest in carbon units
 
 ! !PRIVATE MEMBER FUNCTIONS:
   private :: CNHarvestPftToColumn   ! gather pft-level harvest fluxes to the column level
@@ -135,11 +135,6 @@ contains
                do_check_sums_equal_1=.false., data_shape=[num_points])
        end do
        call dynHarvest_interp_categories(bounds)
-
-    ! only one can be true at a time
-    ! these must match the units of harvest_catnames above
-     wood_harvest_units = harvest_area_fraction
-
 
     end if
 

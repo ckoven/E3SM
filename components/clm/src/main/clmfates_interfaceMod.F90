@@ -278,7 +278,7 @@ contains
       ! 2) add the history variables defined in clm_inst to the history machinery
       call param_derived%Init( numpft_fates )
 
-      verbose_output = .false.
+      verbose_output = .true.
       call FatesInterfaceInit(iulog, verbose_output)
 
       nclumps = get_proc_clumps()
@@ -347,7 +347,7 @@ contains
          pass_num_lu_harvest_cats = num_harvest_cats
          if (wood_harvest_units .eq. harvest_area_fraction) then
             pass_lu_harvest = 1
-         else if (wood_harvest_units .eq. harvest_area_carbon) then
+         else if (wood_harvest_units .eq. harvest_carbon) then
             pass_lu_harvest = 2
          end if
       else
