@@ -4672,105 +4672,105 @@ contains
           end do
        end do
        ! soil phosphorus initialization when exit AD spinup Qing Z. 2017
-       if ( exit_spinup) then ! AD spinup -> RG spinup
-          if (.not. cnstate_vars%pdatasets_present) then
-              call endrun(msg='ERROR:: P pools are required on surface dataset'//&
-              errMsg(__FILE__, __LINE__))
-          end if
+       ! if ( exit_spinup) then ! AD spinup -> RG spinup
+       !    if (.not. cnstate_vars%pdatasets_present) then
+       !        call endrun(msg='ERROR:: P pools are required on surface dataset'//&
+       !        errMsg(__FILE__, __LINE__))
+       !    end if
 
-          ! calculate P initializtation profile
-          depth = 0.5_r8 ! set 50cm as depth threshold for p initializaiton profiles
-          do j = 1, nlevdecomp
-             if (zisoi(j) <= depth) then
-                j_depth = j
-             end if
-          end do
-          do c = bounds%begc, bounds%endc
-             if (use_vertsoilc) then
-                do j = 1, j_depth
-                   pinit_prof(j) = exp(-1._r8 * pinit_beta1(cnstate_vars%isoilorder(c)) * zisoi(j))
-                end do
-                do j = j_depth+1, nlevdecomp
-                   pinit_prof(j) = exp(-1._r8 * pinit_beta2(cnstate_vars%isoilorder(c)) * zisoi(j))
-                end do
-                ! rescale P profile so that distribution conserves and total P mass (g/m2) match obs for top 50 cm
-                pinit_prof_tot = 0._r8
-                do j = 1, j_depth
-                   pinit_prof_tot = pinit_prof_tot + pinit_prof(j) * dzsoi_decomp(j)
-                end do
-                do j = 1, j_depth ! for top 50 cm (6 layers), rescale
-                   pinit_prof(j) = pinit_prof(j) / pinit_prof_tot
-                end do
-                ! for below 50 cm, make sure 7 layer and 6 layer are consistent and also downward
-                tmp_scalar = pinit_prof(j_depth) / pinit_prof(j_depth+1)
-                do j = j_depth+1, nlevdecomp
-                   pinit_prof(j) = pinit_prof(j) * tmp_scalar
-                end do
-             end if
-          end do
+       !    ! calculate P initializtation profile
+       !    depth = 0.5_r8 ! set 50cm as depth threshold for p initializaiton profiles
+       !    do j = 1, nlevdecomp
+       !       if (zisoi(j) <= depth) then
+       !          j_depth = j
+       !       end if
+       !    end do
+       !    do c = bounds%begc, bounds%endc
+       !       if (use_vertsoilc) then
+       !          do j = 1, j_depth
+       !             pinit_prof(j) = exp(-1._r8 * pinit_beta1(cnstate_vars%isoilorder(c)) * zisoi(j))
+       !          end do
+       !          do j = j_depth+1, nlevdecomp
+       !             pinit_prof(j) = exp(-1._r8 * pinit_beta2(cnstate_vars%isoilorder(c)) * zisoi(j))
+       !          end do
+       !          ! rescale P profile so that distribution conserves and total P mass (g/m2) match obs for top 50 cm
+       !          pinit_prof_tot = 0._r8
+       !          do j = 1, j_depth
+       !             pinit_prof_tot = pinit_prof_tot + pinit_prof(j) * dzsoi_decomp(j)
+       !          end do
+       !          do j = 1, j_depth ! for top 50 cm (6 layers), rescale
+       !             pinit_prof(j) = pinit_prof(j) / pinit_prof_tot
+       !          end do
+       !          ! for below 50 cm, make sure 7 layer and 6 layer are consistent and also downward
+       !          tmp_scalar = pinit_prof(j_depth) / pinit_prof(j_depth+1)
+       !          do j = j_depth+1, nlevdecomp
+       !             pinit_prof(j) = pinit_prof(j) * tmp_scalar
+       !          end do
+       !       end if
+       !    end do
 
-          do c = bounds%begc, bounds%endc
-             if (use_vertsoilc) then
-                do j = 1, nlevdecomp
-                   ! solve equilibrium between loosely adsorbed and solution
-                   ! phosphorus
-                   ! the P maps used in the initialization are generated for the top 50cm soils
-                   ! Prescribe P initial profile based on exponential rooting profile [need to improve]
-                   if ((nu_com .eq. 'ECA') .or. (nu_com .eq. 'MIC')) then
-                      a = 1.0_r8
-                      b = VMAX_MINSURF_P_vr(j,cnstate_vars%isoilorder(c)) + &
-                          KM_MINSURF_P_vr(j,cnstate_vars%isoilorder(c)) - cnstate_vars%labp_col(c)*pinit_prof(j)
-                      d = -1.0_r8* cnstate_vars%labp_col(c)*pinit_prof(j) * KM_MINSURF_P_vr(j,cnstate_vars%isoilorder(c))
+       !    do c = bounds%begc, bounds%endc
+       !       if (use_vertsoilc) then
+       !          do j = 1, nlevdecomp
+       !             ! solve equilibrium between loosely adsorbed and solution
+       !             ! phosphorus
+       !             ! the P maps used in the initialization are generated for the top 50cm soils
+       !             ! Prescribe P initial profile based on exponential rooting profile [need to improve]
+       !             if ((nu_com .eq. 'ECA') .or. (nu_com .eq. 'MIC')) then
+       !                a = 1.0_r8
+       !                b = VMAX_MINSURF_P_vr(j,cnstate_vars%isoilorder(c)) + &
+       !                    KM_MINSURF_P_vr(j,cnstate_vars%isoilorder(c)) - cnstate_vars%labp_col(c)*pinit_prof(j)
+       !                d = -1.0_r8* cnstate_vars%labp_col(c)*pinit_prof(j) * KM_MINSURF_P_vr(j,cnstate_vars%isoilorder(c))
 
-                      this%solutionp_vr(c,j) = (-b+(b**2.0_r8-4.0_r8*a*d)**0.5_r8)/(2.0_r8*a)
-                      this%labilep_vr(c,j) = cnstate_vars%labp_col(c)*pinit_prof(j) - this%solutionp_vr(c,j)
-                      this%secondp_vr(c,j) = cnstate_vars%secp_col(c)*pinit_prof(j)
-                      this%occlp_vr(c,j) = cnstate_vars%occp_col(c)*pinit_prof(j)
-                      this%primp_vr(c,j) = cnstate_vars%prip_col(c)*pinit_prof(j)
-                   end if
+       !                this%solutionp_vr(c,j) = (-b+(b**2.0_r8-4.0_r8*a*d)**0.5_r8)/(2.0_r8*a)
+       !                this%labilep_vr(c,j) = cnstate_vars%labp_col(c)*pinit_prof(j) - this%solutionp_vr(c,j)
+       !                this%secondp_vr(c,j) = cnstate_vars%secp_col(c)*pinit_prof(j)
+       !                this%occlp_vr(c,j) = cnstate_vars%occp_col(c)*pinit_prof(j)
+       !                this%primp_vr(c,j) = cnstate_vars%prip_col(c)*pinit_prof(j)
+       !             end if
 
-                   ! assume soil below 50 cm has the same p pool concentration
-                   ! divide 0.5m when convert p pools from g/m2 to g/m3
-                   ! assume p pools evenly distributed at dif layers
-                   if (nu_com .eq. 'RD') then 
-                       smax_c = smax(isoilorder(c))
-                       ks_sorption_c = ks_sorption(isoilorder(c))
-                       this%solutionp_vr(c,j) = (cnstate_vars%labp_col(c)/0.5_r8*ks_sorption_c)/&
-                                    (smax_c-cnstate_vars%labp_col(c)/0.5_r8)
-                       this%labilep_vr(c,j) = cnstate_vars%labp_col(c)/0.5_r8
-                       this%secondp_vr(c,j) = cnstate_vars%secp_col(c)/0.5_r8
-                       this%occlp_vr(c,j) = cnstate_vars%occp_col(c)/0.5_r8
-                       this%primp_vr(c,j) = cnstate_vars%prip_col(c)/0.5_r8
-                   end if
+       !             ! assume soil below 50 cm has the same p pool concentration
+       !             ! divide 0.5m when convert p pools from g/m2 to g/m3
+       !             ! assume p pools evenly distributed at dif layers
+       !             if (nu_com .eq. 'RD') then 
+       !                 smax_c = smax(isoilorder(c))
+       !                 ks_sorption_c = ks_sorption(isoilorder(c))
+       !                 this%solutionp_vr(c,j) = (cnstate_vars%labp_col(c)/0.5_r8*ks_sorption_c)/&
+       !                              (smax_c-cnstate_vars%labp_col(c)/0.5_r8)
+       !                 this%labilep_vr(c,j) = cnstate_vars%labp_col(c)/0.5_r8
+       !                 this%secondp_vr(c,j) = cnstate_vars%secp_col(c)/0.5_r8
+       !                 this%occlp_vr(c,j) = cnstate_vars%occp_col(c)/0.5_r8
+       !                 this%primp_vr(c,j) = cnstate_vars%prip_col(c)/0.5_r8
+       !             end if
 
-                end do
-             else
-                if ((nu_com .eq. 'ECA') .or. (nu_com .eq. 'MIC')) then
-                   a = 1.0_r8
-                   b = VMAX_MINSURF_P_vr(1,cnstate_vars%isoilorder(c)) + &
-                       KM_MINSURF_P_vr(1,cnstate_vars%isoilorder(c)) - cnstate_vars%labp_col(c)/zisoi(nlevdecomp)
-                   d = -1.0_r8* cnstate_vars%labp_col(c)/zisoi(nlevdecomp) * KM_MINSURF_P_vr(j,cnstate_vars%isoilorder(c))
+       !          end do
+       !       else
+       !          if ((nu_com .eq. 'ECA') .or. (nu_com .eq. 'MIC')) then
+       !             a = 1.0_r8
+       !             b = VMAX_MINSURF_P_vr(1,cnstate_vars%isoilorder(c)) + &
+       !                 KM_MINSURF_P_vr(1,cnstate_vars%isoilorder(c)) - cnstate_vars%labp_col(c)/zisoi(nlevdecomp)
+       !             d = -1.0_r8* cnstate_vars%labp_col(c)/zisoi(nlevdecomp) * KM_MINSURF_P_vr(j,cnstate_vars%isoilorder(c))
 
-                   this%solutionp_vr(c,1) = (-b+(b**2.0_r8-4.0_r8*a*d)**0.5_r8)/(2.0_r8*a) * zisoi(nlevdecomp) ! convert to g/m2
-                   this%labilep_vr(c,1) = cnstate_vars%labp_col(c) - this%solutionp_vr(c,1)
-                   this%secondp_vr(c,1) = cnstate_vars%secp_col(c)
-                   this%occlp_vr(c,1) = cnstate_vars%occp_col(c)
-                   this%primp_vr(c,1) = cnstate_vars%prip_col(c)
-                else if (nu_com .eq. 'RD') then
-                   a = 1.0_r8
-                   b = smax(cnstate_vars%isoilorder(c)) + &
-                       ks_sorption(cnstate_vars%isoilorder(c)) - cnstate_vars%labp_col(c)/0.5_r8
-                   d = -1.0_r8* cnstate_vars%labp_col(c)/0.5_r8 * ks_sorption(cnstate_vars%isoilorder(c))
+       !             this%solutionp_vr(c,1) = (-b+(b**2.0_r8-4.0_r8*a*d)**0.5_r8)/(2.0_r8*a) * zisoi(nlevdecomp) ! convert to g/m2
+       !             this%labilep_vr(c,1) = cnstate_vars%labp_col(c) - this%solutionp_vr(c,1)
+       !             this%secondp_vr(c,1) = cnstate_vars%secp_col(c)
+       !             this%occlp_vr(c,1) = cnstate_vars%occp_col(c)
+       !             this%primp_vr(c,1) = cnstate_vars%prip_col(c)
+       !          else if (nu_com .eq. 'RD') then
+       !             a = 1.0_r8
+       !             b = smax(cnstate_vars%isoilorder(c)) + &
+       !                 ks_sorption(cnstate_vars%isoilorder(c)) - cnstate_vars%labp_col(c)/0.5_r8
+       !             d = -1.0_r8* cnstate_vars%labp_col(c)/0.5_r8 * ks_sorption(cnstate_vars%isoilorder(c))
 
-                   this%solutionp_vr(c,1) = (-b+(b**2.0_r8-4.0_r8*a*d)**0.5_r8)/(2.0_r8*a) * 0.5_r8 ! convert to g/m2
-                   this%labilep_vr(c,1) = cnstate_vars%labp_col(c) - this%solutionp_vr(c,1)
-                   this%secondp_vr(c,1) = cnstate_vars%secp_col(c)
-                   this%occlp_vr(c,1) = cnstate_vars%occp_col(c)
-                   this%primp_vr(c,1) = cnstate_vars%prip_col(c)
-                end if
-             end if ! use vertsoilc
-          end do ! column loop
-       end if ! exit spinup
+       !             this%solutionp_vr(c,1) = (-b+(b**2.0_r8-4.0_r8*a*d)**0.5_r8)/(2.0_r8*a) * 0.5_r8 ! convert to g/m2
+       !             this%labilep_vr(c,1) = cnstate_vars%labp_col(c) - this%solutionp_vr(c,1)
+       !             this%secondp_vr(c,1) = cnstate_vars%secp_col(c)
+       !             this%occlp_vr(c,1) = cnstate_vars%occp_col(c)
+       !             this%primp_vr(c,1) = cnstate_vars%prip_col(c)
+       !          end if
+       !       end if ! use vertsoilc
+       !    end do ! column loop
+       ! end if ! exit spinup
     end if ! read and switch state
 
     end associate
