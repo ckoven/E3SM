@@ -1070,7 +1070,7 @@ contains
       !-----------------------------------------------------------------------
 
 
-      if (masterproc) then
+      if (masterproc .and. debug) then
          write(iulog, *) 'FATES dynamics start'
       end if
 
@@ -1277,7 +1277,7 @@ contains
            this%fates(nc)%sites,  &
            this%fates(nc)%bc_in)
 
-      if (masterproc) then
+      if (masterproc .and. debug) then
          write(iulog, *) 'FATES dynamics complete'
       end if
 
@@ -2666,26 +2666,25 @@ contains
 
  ! ======================================================================================
  
- subroutine wrap_canopy_radiation(this, bounds_clump, &
-         num_vegsol, filter_vegsol, coszen, surfalb_inst)
+ subroutine wrap_canopy_radiation(this, bounds_clump, surfalb_inst,nextsw_cday,declinp1)
 
-
+   use shr_orb_mod, only: shr_orb_cosz
+   
     ! Arguments
     class(hlm_fates_interface_type), intent(inout) :: this
     type(bounds_type),  intent(in)             :: bounds_clump
-    ! filter for vegetated pfts with coszen>0
-    integer            , intent(in)            :: num_vegsol
-    integer            , intent(in)            :: filter_vegsol(num_vegsol)
-    ! cosine solar zenith angle for next time step
-    real(r8)           , intent(in)            :: coszen( bounds_clump%begp: )
+    !integer            , intent(in)            :: c
+    !real(r8)           , intent(in)            :: coszen
     type(surfalb_type) , intent(inout)         :: surfalb_inst
-
+    real(r8),intent(in) :: nextsw_cday,declinp1
+    
     ! locals
-    integer                                    :: s,c,p,ifp,icp,nc
+    integer                                    :: s,c,p,ifp,icp,nc,g
 
     associate(&
          albgrd_col   =>    surfalb_inst%albgrd_col         , & !in
          albgri_col   =>    surfalb_inst%albgri_col         , & !in
+         coszen_col   =>    surfalb_inst%coszen_col         , & !in 
          albd         =>    surfalb_inst%albd_patch         , & !out
          albi         =>    surfalb_inst%albi_patch         , & !out
          fabd         =>    surfalb_inst%fabd_patch         , & !out
@@ -2699,51 +2698,55 @@ contains
     do s = 1, this%fates(nc)%nsites
 
        c = this%f2hmap(nc)%fcolumn(s)
-       do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
+       g = col_pp%gridcell(c)
 
-          p = ifp+col_pp%pfti(c)
+       coszen_col(c) = shr_orb_cosz (nextsw_cday, grc_pp%lat(g), grc_pp%lon(g), declinp1)
+       
+       if(coszen_col(c)>0._r8) then
 
-          if( any(filter_vegsol==p) )then
+          do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
 
-             this%fates(nc)%bc_in(s)%filter_vegzen_pa(ifp) = .true.
-             this%fates(nc)%bc_in(s)%coszen_pa(ifp)  = coszen(p)
+             p = ifp+col_pp%pfti(c)
+             
              this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = albgrd_col(c,:)
              this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = albgri_col(c,:)
-
+             
              if (veg_es%t_veg(p) <= tfrz) then
                 this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = veg_ws%fwet(p)
              else
                 this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = 0._r8
              end if
-             
-          else
+          end do
+          
+       end if
 
-             this%fates(nc)%bc_in(s)%filter_vegzen_pa(ifp) = .false.
 
-          end if
-
-       end do
+       call FatesNormalizedCanopyRadiation(this%fates(nc)%sites(s), &
+            coszen_col(c), &
+            this%fates(nc)%bc_in(s),  &
+            this%fates(nc)%bc_out(s))
+       
     end do
-
-    call FatesNormalizedCanopyRadiation(this%fates(nc)%nsites,  &
-         this%fates(nc)%sites, &
-         this%fates(nc)%bc_in,  &
-         this%fates(nc)%bc_out)
-
+    
     ! Pass FATES BC's back to HLM
     ! -----------------------------------------------------------------------------------
-    do icp = 1,num_vegsol
-       p = filter_vegsol(icp)
-       c = veg_pp%column(p)
-       s = this%f2hmap(nc)%hsites(c)
-       ! do if structure here and only pass natveg columns
-       ifp = p-col_pp%pfti(c)
 
-       if(.not.this%fates(nc)%bc_in(s)%filter_vegzen_pa(ifp) )then
-          write(iulog,*) 's,p,ifp',s,p,ifp
-          write(iulog,*) 'Not all patches on the natveg column were passed to canrad',veg_pp%sp_pftorder_index(p)
-          call endrun(msg=errMsg(sourcefile, __LINE__))
-       else
+    do s = 1, this%fates(nc)%nsites
+       c = this%f2hmap(nc)%fcolumn(s)
+
+       ! The default is 100% transmission, and ground reflectance
+       !albd(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = albgrd_col(c,:)
+       !albi(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = albgri_col(c,:)
+       !fabd(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 0._r8
+       !fabi(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 0._r8
+       !ftdd(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 1._r8
+       !ftid(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 1._r8
+       !ftii(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 1._r8
+       
+       do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
+
+          p = ifp+col_pp%pfti(c)
+
           albd(p,:) = this%fates(nc)%bc_out(s)%albd_parb(ifp,:)
           albi(p,:) = this%fates(nc)%bc_out(s)%albi_parb(ifp,:)
           fabd(p,:) = this%fates(nc)%bc_out(s)%fabd_parb(ifp,:)
@@ -2751,9 +2754,13 @@ contains
           ftdd(p,:) = this%fates(nc)%bc_out(s)%ftdd_parb(ifp,:)
           ftid(p,:) = this%fates(nc)%bc_out(s)%ftid_parb(ifp,:)
           ftii(p,:) = this%fates(nc)%bc_out(s)%ftii_parb(ifp,:)
-       end if
-    end do
 
+       end do
+
+       
+       
+    end do
+    
   end associate
 
  end subroutine wrap_canopy_radiation

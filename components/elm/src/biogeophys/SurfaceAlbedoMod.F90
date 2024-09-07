@@ -305,8 +305,8 @@ contains
 
        call SoilAlbedo(bounds, &
             num_nourbanc, filter_nourbanc, &
-         coszen_col(bounds%begc:bounds%endc), &
-         albsnd(bounds%begc:bounds%endc, :), &
+            coszen_col(bounds%begc:bounds%endc), &
+            albsnd(bounds%begc:bounds%endc, :), &
             albsni(bounds%begc:bounds%endc, :), &
             lakestate_vars, surfalb_vars)
 
@@ -732,17 +732,17 @@ contains
     num_novegsol = 0
     do fp = 1,num_nourbanp
        p = filter_nourbanp(fp)
-          if (coszen_patch(p) > 0._r8) then
-             if ((lun_pp%itype(veg_pp%landunit(p)) == istsoil .or.  &
-                  lun_pp%itype(veg_pp%landunit(p)) == istcrop     ) &
-                 .and. (elai(p) + esai(p)) > 0._r8) then
-                    num_vegsol = num_vegsol + 1
-                    filter_vegsol(num_vegsol) = p
-             else
-                num_novegsol = num_novegsol + 1
-                filter_novegsol(num_novegsol) = p
-             end if
+       if (coszen_patch(p) > 0._r8) then
+          if ((lun_pp%itype(veg_pp%landunit(p)) == istsoil .or.  &
+               lun_pp%itype(veg_pp%landunit(p)) == istcrop     ) &
+               .and. (elai(p) + esai(p)) > 0._r8) then
+             num_vegsol = num_vegsol + 1
+             filter_vegsol(num_vegsol) = p
+          else
+             num_novegsol = num_novegsol + 1
+             filter_novegsol(num_novegsol) = p
           end if
+       end if
     end do
 
     ! Weight reflectance/transmittance by lai and sai
@@ -936,10 +936,8 @@ contains
     if(use_fates)then
 #ifndef _OPENACC
 
-       call alm_fates%wrap_canopy_radiation(bounds, &
-            num_vegsol, filter_vegsol, &
-            coszen_patch(bounds%begp:bounds%endp), &
-            surfalb_vars)
+       call alm_fates%wrap_canopy_radiation(bounds,surfalb_vars,nextsw_cday,declinp1)
+       
 #endif
     else
     
