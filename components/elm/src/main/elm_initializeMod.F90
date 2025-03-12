@@ -29,7 +29,7 @@ module elm_initializeMod
   !-----------------------------------------
   use GridcellType           , only : grc_pp
   use TopounitType           , only : top_pp
-  use TopounitDataType       , only : top_as, top_af, top_es
+  use TopounitDataType       , only : top_as, top_af, top_es, top_ws
   use LandunitType           , only : lun_pp
   use ColumnType             , only : col_pp
   use ColumnDataType         , only : col_es
@@ -59,6 +59,7 @@ contains
     ! !USES:
     use elm_varpar                , only: elm_varpar_init, natpft_lb, natpft_ub
     use elm_varpar                , only: cft_lb, cft_ub, maxpatch_glcmec
+    use elm_varpar                , only: mxpft, numveg, mxpft_nc, numpft
     use elm_varpar                , only: update_pft_array_bounds
     use elm_varpar                , only: surfpft_lb, surfpft_ub
     use elm_varcon                , only: elm_varcon_init
@@ -268,10 +269,10 @@ contains
 
     allocate (wt_lunit     (begg:endg,1:max_topounits, max_lunit           )) 
     allocate (urban_valid  (begg:endg,1:max_topounits                      ))
-    allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
-    allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
-    allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
-    allocate (fert_p_cft   (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+    !allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
+    !allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+    !allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+    !allocate (fert_p_cft   (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
     if (create_glacier_mec_landunit) then
        allocate (wt_glc_mec  (begg:endg,1:max_topounits, maxpatch_glcmec))
        allocate (topo_glc_mec(begg:endg,1:max_topounits, maxpatch_glcmec))
@@ -293,6 +294,14 @@ contains
     ! Independent of model resolution, Needs to stay before surfrd_get_data
 
     call pftconrd()
+    ! if by user-defined PFT (numbers and names), 'numpft/mxpft_nc' may be changed including other derived indices
+    !
+    ! a few arrays allocation previously done above is moved here i.e. after this 'pftconrd' call
+    allocate (wt_nat_patch (begg:endg,1:max_topounits, surfpft_lb:surfpft_ub ))
+    allocate (wt_cft       (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+    allocate (fert_cft     (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+    allocate (fert_p_cft   (begg:endg,1:max_topounits, cft_lb:cft_ub       ))
+
     call soilorder_conrd()
 
     ! Read in FATES parameter values early in the call sequence as well
@@ -351,6 +360,7 @@ contains
     call top_as%Init (bounds_proc%begt_all, bounds_proc%endt_all) ! atmospheric state variables (forcings)
     call top_af%Init (bounds_proc%begt_all, bounds_proc%endt_all) ! atmospheric flux variables (forcings)
     call top_es%Init (bounds_proc%begt_all, bounds_proc%endt_all) ! energy state
+    call top_ws%Init (bounds_proc%begt_all, bounds_proc%endt_all) ! water state
 
     ! Initialize the landunit data types
     call lun_pp%Init (bounds_proc%begl_all, bounds_proc%endl_all)

@@ -17,7 +17,7 @@ module VegetationDataType
   use elm_varcon      , only : spval, ispval, sb
   use elm_varcon      , only : c13ratio, c14ratio
   use landunit_varcon , only : istsoil, istcrop
-  use pftvarcon       , only : npcropmin, noveg, nstor
+  use pftvarcon       , only : iscft, noveg, nstor
   use elm_varctl      , only : iulog, use_cn, spinup_state, spinup_mortality_factor, use_fates
   use elm_varctl      , only : nu_com, use_crop, use_c13
   use elm_varctl      , only : use_lch4, use_betr
@@ -1567,6 +1567,7 @@ module VegetationDataType
     use shr_const_mod    , only : SHR_CONST_CDAY, SHR_CONST_TKFRZ
     use elm_time_manager , only : get_step_size, get_nstep, is_end_curr_day, get_curr_date
     use accumulMod       , only : update_accum_field, extract_accum_field, accumResetVal
+    use pftvarcon        , only: nwcereal, nwcerealirrig
     !
     ! !ARGUMENTS:
     class(vegetation_energy_state)    :: this
@@ -1585,6 +1586,10 @@ module VegetationDataType
     integer :: begp, endp
     real(r8), pointer :: rbufslp(:)      ! temporary single level - pft level
     !---------------------------------------------------------------------
+
+   associate(                             &
+        ivt         => veg_pp%itype       & ! Input:  [integer  (:) ]  pft vegetation type
+        )
 
     begp = bounds%begp; endp = bounds%endp
 
@@ -1718,13 +1723,29 @@ module VegetationDataType
 
        do p = begp,endp
           g = veg_pp%gridcell(p)
-          if (month==1 .and. day==1 .and. secs==int(dtime)) then
-             rbufslp(p) = accumResetVal ! reset gdd
-          else if (( month > 3 .and. month < 10 .and. grc_pp%latdeg(g) >= 0._r8) .or. &
-                   ((month > 9 .or.  month < 4) .and. grc_pp%latdeg(g) <  0._r8)     ) then
-             rbufslp(p) = max(0._r8, min(26._r8, this%t_ref2m(p)-SHR_CONST_TKFRZ)) * dtime/SHR_CONST_CDAY
+
+          ! Added based on Yaqiong Lu et al., 2017 in Geosci. Model Dev.
+          ! Accumulate GDD0 for winter wheat from September to June in NH
+          ! April to December in SH, the accumulated period may be less than the actual
+          ! winter wheat growing season
+          if(ivt(p) == nwcereal .or. ivt(p) == nwcerealirrig) then
+             if (month==9 .and. day==1 .and. secs==int(dtime)) then
+                rbufslp(p) = accumResetVal ! reset gdd
+             else if (( month > 8 .or. month < 7 .and. grc_pp%latdeg(g) >= 0._r8) .or. &
+                      ((month > 3 .and. month < 10) .and. grc_pp%latdeg(g) <  0._r8)) then
+                rbufslp(p) = max(0._r8, min(26._r8, this%t_ref2m(p)-SHR_CONST_TKFRZ)) * dtime/SHR_CONST_CDAY
+             else
+                rbufslp(p) = 0._r8      ! keeps gdd unchanged at other times (eg,through Dec in NH)
+             end if
           else
-             rbufslp(p) = 0._r8      ! keeps gdd unchanged at other times (eg, through Dec in NH)
+             if (month==1 .and. day==1 .and. secs==int(dtime)) then
+                rbufslp(p) = accumResetVal ! reset gdd
+             else if (( month > 3 .and. month < 10 .and. grc_pp%latdeg(g) >= 0._r8) .or. &
+                      ((month > 9 .or.  month < 4) .and. grc_pp%latdeg(g) <  0._r8)     ) then
+                rbufslp(p) = max(0._r8, min(26._r8, this%t_ref2m(p)-SHR_CONST_TKFRZ)) * dtime/SHR_CONST_CDAY
+             else
+                rbufslp(p) = 0._r8      ! keeps gdd unchanged at other times (eg, through Dec in NH)
+             end if
           end if
        end do
        call update_accum_field  ('GDD0', rbufslp, nstep)
@@ -1766,6 +1787,7 @@ module VegetationDataType
     end if
 
     deallocate(rbufslp)
+    end associate
 
   end subroutine update_acc_vars_veg_es
 
@@ -2447,7 +2469,7 @@ module VegetationDataType
                 if (veg_vp%evergreen(veg_pp%itype(p)) == 1._r8) then
                    this%leafc(p)         = 1._r8 * ratio
                    this%leafc_storage(p) = 0._r8
-                else if (veg_pp%itype(p) >= npcropmin) then ! prognostic crop types
+                else if (iscft(veg_pp%itype(p))) then ! prognostic crop types
                    this%leafc(p) = 0._r8
                    this%leafc_storage(p) = 0._r8
                 else
@@ -2465,7 +2487,7 @@ module VegetationDataType
              this%livestemc_storage(p) = 0._r8
              this%livestemc_xfer(p)    = 0._r8
 
-             if (veg_vp%woody(veg_pp%itype(p)) == 1._r8) then
+             if (veg_vp%woody(veg_pp%itype(p)) >= 1.0_r8) then
                 this%deadstemc(p) = 0.1_r8 * ratio
              else
                 this%deadstemc(p) = 0._r8
@@ -3572,7 +3594,7 @@ module VegetationDataType
             this%gresp_storage(p)      + &
             this%gresp_xfer(p)
 
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%storvegc(p) =            &
                this%storvegc(p)       + &
                this%grainc_storage(p) + &
@@ -3937,7 +3959,7 @@ module VegetationDataType
           ! tree types need to be initialized with some stem mass so that
           ! roughness length is not zero in canopy flux calculation
 
-          if (veg_vp%woody(veg_pp%itype(p)) == 1._r8) then
+          if (veg_vp%woody(veg_pp%itype(p)) >= 1.0_r8) then
              this%deadstemn(p) = veg_cs%deadstemc(p) / veg_vp%deadwdcn(veg_pp%itype(p))
           else
              this%deadstemn(p) = 0._r8
@@ -4249,7 +4271,7 @@ module VegetationDataType
            this%npool(p)              + &
            this%retransn(p)
 
-      if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+      if ( crop_prog .and. iscft(veg_pp%itype(p)))then
          this%dispvegn(p) = &
               this%dispvegn(p) + &
               this%grainn(p)
@@ -4621,7 +4643,7 @@ module VegetationDataType
           ! tree types need to be initialized with some stem mass so that
           ! roughness length is not zero in canopy flux calculation
 
-          if (veg_vp%woody(veg_pp%itype(p)) == 1._r8) then
+          if (veg_vp%woody(veg_pp%itype(p)) >= 1.0_r8) then
              this%deadstemp(p) = veg_cs%deadstemc(p) / veg_vp%deadwdcp(veg_pp%itype(p))
           else
              this%deadstemp(p) = 0._r8
@@ -4997,7 +5019,7 @@ module VegetationDataType
            this%ppool(p)              + &
            this%retransp(p)
 
-      if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+      if ( crop_prog .and. iscft(veg_pp%itype(p)))then
          this%dispvegp(p) = &
               this%dispvegp(p) + &
               this%grainp(p)
@@ -8189,7 +8211,7 @@ module VegetationDataType
             this%cpool_livecroot_storage_gr(p) + &
             this%cpool_deadcroot_storage_gr(p)
 
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%mr(p) = &
                this%mr(p) + &
                this%grain_mr(p)
@@ -8214,7 +8236,7 @@ module VegetationDataType
             this%storage_gr(p)
 
        ! autotrophic respiration (AR)
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%ar(p) = &
                this%mr(p) + &
                this%gr(p) + &
@@ -8324,8 +8346,7 @@ module VegetationDataType
        this%wood_harvestc(p) = &
             this%hrv_deadstemc_to_prod10c(p) + &
             this%hrv_deadstemc_to_prod100c(p)
-       
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%wood_harvestc(p) = &
                this%wood_harvestc(p) + &
                this%hrv_cropc_to_prod1c(p)
@@ -8355,7 +8376,7 @@ module VegetationDataType
             this%m_gresp_xfer_to_fire(p)           + &
             this%m_cpool_to_fire(p)
 
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%litfall(p) =                  &
                this%litfall(p)             + &
                this%livestemc_to_litter(p) + &
@@ -8394,7 +8415,7 @@ module VegetationDataType
        this%leafc_loss(p) =  this%leafc_loss(p) + &
             this%hrv_leafc_to_litter(p)  
 
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%leafc_loss(p) = &
                this%leafc_loss(p) + &
                this%hrv_leafc_to_prod1c(p)
@@ -8438,7 +8459,7 @@ module VegetationDataType
             this%hrv_deadcrootc_storage_to_litter(p) + &
             this%hrv_deadcrootc_xfer_to_litter(p)
        ! putting the harvested crop stem and grain in the wood loss bdrewniak
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%woodc_loss(p) = &
                this%woodc_loss(p) + &
                this%hrv_grainc_to_prod1c(p) + &
@@ -8563,7 +8584,7 @@ module VegetationDataType
             this%cpool_to_deadstemc(p)              + &
             this%deadstemc_xfer_to_deadstemc(p)
 
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
           this%agnpp(p) =                    &
                this%agnpp(p)               + &
                this%cpool_to_grainc(p)     + &
@@ -9721,7 +9742,7 @@ module VegetationDataType
        this%wood_harvestn(p) = &
             this%hrv_deadstemn_to_prod10n(p) + &
             this%hrv_deadstemn_to_prod100n(p)
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
             this%wood_harvestn(p) = &
             this%wood_harvestn(p) + &
             this%hrv_cropn_to_prod1n(p)
@@ -10777,7 +10798,7 @@ module VegetationDataType
        this%wood_harvestp(p) = &
             this%hrv_deadstemp_to_prod10p(p) + &
             this%hrv_deadstemp_to_prod100p(p)
-       if ( crop_prog .and. veg_pp%itype(p) >= npcropmin )then
+       if ( crop_prog .and. iscft(veg_pp%itype(p)))then
             this%wood_harvestp(p) = &
             this%wood_harvestp(p) + &
             this%hrv_cropp_to_prod1p(p)

@@ -58,6 +58,16 @@ module ELMFatesInterfaceMod
    use elm_varctl        , only : use_fates_luh
    use elm_varctl        , only : use_fates_lupft
    use elm_varctl        , only : use_fates_potentialveg
+   use elm_varctl        , only : use_fates_daylength_factor
+   use elm_varctl        , only : fates_photosynth_acclimation
+   use elm_varctl        , only : fates_stomatal_model
+   use elm_varctl        , only : fates_stomatal_assimilation
+   use elm_varctl        , only : fates_leafresp_model
+   use elm_varctl        , only : fates_cstarvation_model
+   use elm_varctl        , only : fates_regeneration_model
+   use elm_varctl        , only : fates_hydro_solver
+   use elm_varctl        , only : fates_radiation_model
+   use elm_varctl        , only : fates_electron_transport_model
    use elm_varctl        , only : flandusepftdat
    use elm_varctl        , only : use_fates_tree_damage
    use elm_varctl        , only : nsrest, nsrBranch
@@ -411,6 +421,17 @@ contains
      integer                                        :: pass_num_luh_states
      integer                                        :: pass_num_luh_transitions
      integer                                        :: pass_lupftdat
+     integer                                        :: pass_daylength_factor_switch
+     integer                                        :: pass_photosynth_acclimation_switch
+     integer                                        :: pass_stomatal_model
+     integer                                        :: pass_stomatal_assimilation
+     integer                                        :: pass_leafresp_model
+     integer                                        :: pass_cstarvation_model
+     integer                                        :: pass_regeneration_model
+     integer                                        :: pass_hydro_solver
+     integer                                        :: pass_radiation_model
+     integer                                        :: pass_electron_transport_model
+     
      ! ----------------------------------------------------------------------------------
      ! FATES lightning definitions
      ! 1 : use a global constant lightning rate found in fates_params.
@@ -594,6 +615,83 @@ contains
            pass_cohort_age_tracking = 0
         end if
         call set_fates_ctrlparms('use_cohort_age_tracking',ival=pass_cohort_age_tracking)
+
+        if (trim(fates_radiation_model) == 'norman') then
+           pass_radiation_model = 1
+        else if (trim(fates_radiation_model) == 'twostream') then
+           pass_radiation_model = 2
+        end if
+        call set_fates_ctrlparms('radiation_model',ival=pass_radiation_model)
+
+        if (trim(fates_electron_transport_model) == 'FvCB1980') then
+           pass_electron_transport_model = 1
+        else if (trim(fates_electron_transport_model) == 'JohnsonBerry2021') then
+           pass_electron_transport_model = 2
+        end if
+        call set_fates_ctrlparms('electron_transport_model',ival=pass_electron_transport_model)
+
+        
+        if (trim(fates_hydro_solver) == '1D_Taylor') then
+           pass_hydro_solver = 1
+        else if (trim(fates_hydro_solver) == '2D_Picard') then
+           pass_hydro_solver = 2
+        else if (trim(fates_hydro_solver) == '2D_Newton') then
+           pass_hydro_solver = 3
+        end if
+        call set_fates_ctrlparms('hydr_solver',ival=pass_hydro_solver)
+
+
+        if (trim(fates_regeneration_model) == 'default') then
+           pass_regeneration_model = 1
+        else if (trim(fates_regeneration_model) == 'trs') then
+           pass_regeneration_model = 2
+        else if (trim(fates_regeneration_model) == 'trs_no_seed_dyn') then
+           pass_regeneration_model = 3
+        end if
+        call set_fates_ctrlparms('regeneration_model',ival=pass_regeneration_model)
+
+
+        if (trim(fates_cstarvation_model) == 'linear') then
+           pass_cstarvation_model = 1
+        else if (trim(fates_cstarvation_model) == 'expontential') then
+           pass_cstarvation_model = 2
+        end if
+        call set_fates_ctrlparms('mort_cstarvation_model',ival=pass_cstarvation_model)
+
+        if (trim(fates_leafresp_model) == 'ryan1991') then
+           pass_leafresp_model = 1
+        else if (trim(fates_leafresp_model) == 'atkin2017') then
+           pass_leafresp_model = 2
+        end if
+        call set_fates_ctrlparms('maintresp_leaf_model',ival=pass_leafresp_model)
+
+        if (trim(fates_stomatal_assimilation) == 'net') then
+           pass_stomatal_assimilation = 1
+        else if (trim(fates_stomatal_assimilation) == 'gross') then
+           pass_stomatal_assimilation = 2
+        end if
+        call set_fates_ctrlparms('stomatal_assim_model',ival=pass_stomatal_assimilation)
+
+        if (trim(fates_stomatal_model) == 'ballberry1987') then
+           pass_stomatal_model = 1
+        else if (trim(fates_stomatal_model) == 'medlyn2011') then
+           pass_stomatal_model = 2
+        end if
+        call set_fates_ctrlparms('stomatal_model',ival=pass_stomatal_model)
+
+        if(trim(fates_photosynth_acclimation) == 'kumarathunge2019') then
+           pass_photosynth_acclimation_switch = 1
+        else if(trim(fates_photosynth_acclimation) == 'nonacclimating') then
+           pass_photosynth_acclimation_switch = 0
+        end if
+        call set_fates_ctrlparms('photosynth_acclimation',ival=pass_photosynth_acclimation_switch)
+
+        if(use_fates_daylength_factor) then
+           pass_daylength_factor_switch = 1
+        else
+           pass_daylength_factor_switch = 0
+        end if
+        call set_fates_ctrlparms('use_daylength_factor_switch',ival=pass_daylength_factor_switch)
 
         if(use_fates_inventory_init) then
            pass_inventory_init = 1
@@ -2685,6 +2783,7 @@ contains
         product_closs => col_cf%product_closs ,  &
         hr     => col_cf%hr)
  
+
     nc = bounds_clump%clump_index
     ! Loop over columns
     do icc = 1,fc
@@ -2717,8 +2816,6 @@ contains
     ! Arguments
     class(hlm_fates_interface_type), intent(inout) :: this
     type(bounds_type),  intent(in)             :: bounds_clump
-    !integer            , intent(in)            :: c
-    !real(r8)           , intent(in)            :: coszen
     type(surfalb_type) , intent(inout)         :: surfalb_inst
     real(r8),intent(in) :: nextsw_cday,declinp1
     
@@ -2728,7 +2825,7 @@ contains
     associate(&
          albgrd_col   =>    surfalb_inst%albgrd_col         , & !in
          albgri_col   =>    surfalb_inst%albgri_col         , & !in
-         coszen_col   =>    surfalb_inst%coszen_col         , & !in 
+         coszen_col   =>    surfalb_inst%coszen_col         , & !in
          albd         =>    surfalb_inst%albd_patch         , & !out
          albi         =>    surfalb_inst%albi_patch         , & !out
          fabd         =>    surfalb_inst%fabd_patch         , & !out
@@ -2745,52 +2842,44 @@ contains
        g = col_pp%gridcell(c)
 
        coszen_col(c) = shr_orb_cosz (nextsw_cday, grc_pp%lat(g), grc_pp%lon(g), declinp1)
+
+       this%fates(nc)%bc_in(s)%coszen = coszen_col(c)
        
-       if(coszen_col(c)>0._r8) then
-
-          do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
-
-             p = ifp+col_pp%pfti(c)
-             
-             this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = albgrd_col(c,:)
-             this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = albgri_col(c,:)
-             
-             if (veg_es%t_veg(p) <= tfrz) then
-                this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = veg_ws%fwet(p)
-             else
-                this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = 0._r8
-             end if
-          end do
+       do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
           
-       end if
-
-
-       call FatesNormalizedCanopyRadiation(this%fates(nc)%sites(s), &
-            coszen_col(c), &
-            this%fates(nc)%bc_in(s),  &
-            this%fates(nc)%bc_out(s))
+          p = ifp+col_pp%pfti(c)
+          if (veg_es%t_veg(p) <= tfrz) then
+             this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = veg_ws%fwet(p)
+          else
+             this%fates(nc)%bc_in(s)%fcansno_pa(ifp) = 0._r8
+          end if
+       end do
        
+       if(coszen_col(c) > 0._r8) then
+
+          this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = albgrd_col(c,:)
+          this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = albgri_col(c,:)
+       else
+
+          ! This will ensure a crash in FATES if it tries
+          this%fates(nc)%bc_in(s)%albgr_dir_rb(:) = spval
+          this%fates(nc)%bc_in(s)%albgr_dif_rb(:) = spval
+
+       end if
     end do
     
+    call FatesNormalizedCanopyRadiation( &
+         this%fates(nc)%sites, &
+         this%fates(nc)%bc_in,  &
+         this%fates(nc)%bc_out)
+
     ! Pass FATES BC's back to HLM
     ! -----------------------------------------------------------------------------------
 
     do s = 1, this%fates(nc)%nsites
        c = this%f2hmap(nc)%fcolumn(s)
-
-       ! The default is 100% transmission, and ground reflectance
-       !albd(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = albgrd_col(c,:)
-       !albi(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = albgri_col(c,:)
-       !fabd(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 0._r8
-       !fabi(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 0._r8
-       !ftdd(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 1._r8
-       !ftid(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 1._r8
-       !ftii(p,col_pp%pfti(c)+1:col_pp%pftf(c)) = 1._r8
-       
        do ifp = 1, this%fates(nc)%sites(s)%youngest_patch%patchno
-
           p = ifp+col_pp%pfti(c)
-
           albd(p,:) = this%fates(nc)%bc_out(s)%albd_parb(ifp,:)
           albi(p,:) = this%fates(nc)%bc_out(s)%albi_parb(ifp,:)
           fabd(p,:) = this%fates(nc)%bc_out(s)%fabd_parb(ifp,:)
@@ -2798,13 +2887,9 @@ contains
           ftdd(p,:) = this%fates(nc)%bc_out(s)%ftdd_parb(ifp,:)
           ftid(p,:) = this%fates(nc)%bc_out(s)%ftid_parb(ifp,:)
           ftii(p,:) = this%fates(nc)%bc_out(s)%ftii_parb(ifp,:)
-
        end do
-
-       
-       
     end do
-    
+
   end associate
 
  end subroutine wrap_canopy_radiation
@@ -3568,7 +3653,7 @@ end subroutine wrap_update_hifrq_hist
    use FatesInterfaceTypesMod, only : nlevage_fates    => nlevage
    use FatesInterfaceTypesMod, only : nlevheight_fates => nlevheight
    use FatesInterfaceTypesMod, only : nlevdamage_fates => nlevdamage
-   use FatesLitterMod,        only : nfsc_fates       => nfsc
+   use FatesFuelClassesMod,        only : nfc_fates   => num_fuel_classes
    use FatesLitterMod,    only : ncwd_fates       => ncwd
    use EDParamsMod,       only : nlevleaf_fates   => nlevleaf
    use EDParamsMod,       only : nclmax_fates     => nclmax
@@ -3606,7 +3691,7 @@ end subroutine wrap_update_hifrq_hist
    fates%sizeage_class_end   = nlevsclass_fates * nlevage_fates
 
    fates%fuel_begin = 1
-   fates%fuel_end = nfsc_fates
+   fates%fuel_end = nfc_fates
 
    fates%cdpf_begin = 1
    fates%cdpf_end = nlevdamage_fates * numpft_fates * nlevsclass_fates
@@ -3657,7 +3742,7 @@ end subroutine wrap_update_hifrq_hist
    fates%coage_class_end = nlevcoage
 
    fates%agefuel_begin = 1
-   fates%agefuel_end   = nlevage_fates * nfsc_fates
+   fates%agefuel_end   = nlevage_fates * nfc_fates
 
    fates%landuse_begin = 1
    fates%landuse_end   = n_landuse_cats

@@ -11,7 +11,7 @@
 #include "share/grid/point_grid.hpp"
 #include "share/grid/mesh_free_grids_manager.hpp"
 #include "share/grid/remap/inverse_remapper.hpp"
-#include "share/util/scream_time_stamp.hpp"
+#include "share/util/eamxx_time_stamp.hpp"
 
 #include "ekat/ekat_parameter_list.hpp"
 #include "ekat/ekat_parse_yaml_file.hpp"
@@ -443,7 +443,7 @@ TEST_CASE("atm_proc_dag", "") {
 
     using strvec_t = std::vector<std::string>;
     auto params = create_test_params();
-    auto p1 = params.sublist("BarBaz");
+    auto& p1 = params.sublist("BarBaz");
 
     // Make sure there's a missing piece (whatever Baz computes);
     p1.set<strvec_t>("atm_procs_list",{"Bar"});

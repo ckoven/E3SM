@@ -3,21 +3,18 @@
     libpyeamxx internals to the rest of pyeamxx
 """
 
-from libpyeamxx.libpyeamxx_ext import AtmProc
-from libpyeamxx.libpyeamxx_ext import Grid
-from libpyeamxx.libpyeamxx_ext import ParameterList
-from libpyeamxx.libpyeamxx_ext import init
-from libpyeamxx.libpyeamxx_ext import Field
-from libpyeamxx.libpyeamxx_ext import P3
-from libpyeamxx.libpyeamxx_ext import finalize
-
+from libpyeamxx.pyeamxx_ext import init
+from libpyeamxx.pyeamxx_ext import finalize
+from libpyeamxx.pyeamxx_ext import Field
+from libpyeamxx.pyeamxx_ext import AtmProc
+from libpyeamxx.pyeamxx_ext import ParameterList
+from libpyeamxx.pyeamxx_ext import create_grids_manager
 
 __all__ = [
-    'init',
-    'finalize',
-    'AtmProc',
-    'Grid',
-    'ParameterList',
-    'Field',
-    'P3',
+    "init",
+    "finalize",
+    "Field",
+    "AtmProc",
+    "ParameterList",
+    "create_grids_manager",
 ]

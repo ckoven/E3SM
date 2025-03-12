@@ -123,6 +123,7 @@ module ocn_core_interface
       logical, pointer :: dataLandIceFluxesPKGActive
       logical, pointer :: landIceFluxesPKGActive
       logical, pointer :: landIceCouplingPKGActive
+      logical, pointer :: dataSubglacialRunoffFluxPKGActive
       logical, pointer :: thicknessBulkPKGActive
       logical, pointer :: frazilIceActive
       logical, pointer :: tidalForcingActive
@@ -139,6 +140,7 @@ module ocn_core_interface
       logical, pointer :: verticalRemapPKGActive
       logical, pointer :: activeWavePKGActive
       logical, pointer :: subgridWetDryPKGActive
+      logical, pointer :: scaledDISMFPKGActive
 
       type (mpas_pool_iterator_type) :: pkgItr
       logical, pointer :: packageActive
@@ -174,6 +176,7 @@ module ocn_core_interface
       logical, pointer :: config_use_gotm
       logical, pointer :: config_use_active_wave
       logical, pointer :: config_use_subgrid_wetting_drying
+      logical, pointer :: config_scale_dismf_by_removed_ice_runoff
 
       character (len=StrKIND), pointer :: config_time_integrator
       character (len=StrKIND), pointer :: config_ocean_run_mode
@@ -186,6 +189,7 @@ module ocn_core_interface
       logical, pointer :: config_use_bulk_thickness_flux
       logical, pointer :: config_compute_active_tracer_budgets
       character (len=StrKIND), pointer :: config_land_ice_flux_mode
+      character (len=StrKIND), pointer :: config_subglacial_runoff_mode
 
        type (mpas_pool_iterator_type) :: groupItr
        character (len=StrKIND) :: tracerGroupName, configName, packageName
@@ -320,6 +324,15 @@ module ocn_core_interface
       end if
 
       !
+      ! test for use of subglacial runoff flux, dataSubglacialRunoffFluxPKGActive
+      !
+      call mpas_pool_get_package(packagePool, 'dataSubglacialRunoffFluxPKGActive', dataSubglacialRunoffFluxPKGActive)
+      call mpas_pool_get_config(configPool, 'config_subglacial_runoff_mode', config_subglacial_runoff_mode)
+      if ( trim(config_subglacial_runoff_mode) == 'data' ) then
+         dataSubglacialRunoffFluxPKGActive = .true.
+      end if
+
+      !
       ! test for use of frazil ice formation, frazilIceActive
       !
       call mpas_pool_get_package(packagePool, 'frazilIceActive', frazilIceActive)
@@ -436,6 +449,17 @@ module ocn_core_interface
       call mpas_pool_get_config(configPool, 'config_use_subgrid_wetting_drying', config_use_subgrid_wetting_drying)
       if (config_use_subgrid_wetting_drying) then
          subgridWetDryPKGActive = .true.
+      end if
+
+      !
+      ! test for scaling data ice-shelf melt fluxes by the running mean of removed ice runoff
+      !
+      call mpas_pool_get_package(packagePool, 'scaledDISMFPKGActive', scaledDISMFPKGActive)
+      call mpas_pool_get_config(configPool, &
+                                'config_scale_dismf_by_removed_ice_runoff', &
+                                config_scale_dismf_by_removed_ice_runoff)
+      if (config_scale_dismf_by_removed_ice_runoff) then
+         scaledDISMFPKGActive = .true.
       end if
 
       !

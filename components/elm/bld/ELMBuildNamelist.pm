@@ -830,7 +830,18 @@ sub setup_cmdl_fates_mode {
                      "use_fates_tree_damage",
                      "use_century_decomp",
                      "use_snicar_ad",
-                     "use_vertsoilc");
+                     "use_vertsoilc",
+                     "use_fates_daylength_factor",
+                     "fates_photosynth_acclimation",
+                     "fates_stomatal_model",
+                     "fates_stomatal_assimilation",
+                     "fates_leafresp_model",
+                     "fates_cstarvation_model",
+                     "fates_regeneration_model",
+                     "fates_hydro_solver",
+                     "fates_radiation_model",
+	             "fates_electron_transport_model");
+
       foreach my $var ( @list ) {
 	  if ( defined($nl->get_value($var))  ) {
 	      $nl_flags->{$var} = $nl->get_value($var);
@@ -1552,13 +1563,19 @@ sub setup_cmdl_maxpft {
   $nl_flags->{'maxpft'} = $val;
 
   if ( ($nl_flags->{'bgc_mode'} ne "sp") && ($nl_flags->{'maxpft'} != $maxpatchpft{$nl_flags->{'use_crop'}}) ) {
-    fatal_error("** For CN or BGC mode you MUST set max patch PFT's to $maxpatchpft{$nl_flags->{'use_crop'}}\n" .
-    "**\n" .
-    "** When the crop model is on then it must be set to $maxpatchpft{'crop'} otherwise to $maxpatchpft{'nocrop'}\n" .
-    "** Set the bgc mode, crop and maxpft by the following means from highest to lowest precedence:\n" .
-    "** * by the command-line options -bgc, -crop and -maxpft\n" .
-    "** * by a default configuration file, specified by -defaults\n" .
-    "**\n");
+    if ($opts->{$var} eq "default") {
+      fatal_error("** For CN or BGC mode you MUST set max patch PFT $val to $maxpatchpft{$nl_flags->{'use_crop'}}\n" .
+      "**\n" .
+      "** When the crop model is on then it must be set to $maxpatchpft{'crop'} otherwise to $maxpatchpft{'nocrop'}\n" .
+      "** Set the bgc mode, crop and maxpft by the following means from highest to lowest precedence:\n" .
+      "** * by the command-line options -bgc, -crop and -maxpft\n" .
+      "** * by a default configuration file, specified by -defaults\n" .
+      "**\n");
+    } else {
+         message("running with maxpft NOT equal to $maxpatchpft{$nl_flags->{'use_crop'}} is " .
+              "NOT validated / scientifically supported.\n");
+      	
+      }
   }
   if ( $nl_flags->{'maxpft'} > $maxpatchpft{$nl_flags->{'use_crop'}} ) {
     fatal_error("** Max patch PFT's can NOT exceed $maxpatchpft{$nl_flags->{'use_crop'}}\n" .
@@ -3423,7 +3440,17 @@ sub setup_logic_fates {
                    "use_fates_planthydro",
                    "use_fates_potentialveg",
                    "use_fates_sp",
-                   "use_fates_tree_damage");
+                   "use_fates_tree_damage",
+                   "use_fates_daylength_factor",
+                   "fates_photosynth_acclimation",
+                   "fates_stomatal_model",
+                   "fates_stomatal_assimilation",
+                   "fates_leafresp_model",
+                   "fates_cstarvation_model",
+                   "fates_regeneration_model",
+                   "fates_hydro_solver",
+                   "fates_radiation_model",
+	           "fates_electron_transport_model");
 
     foreach my $var (@list) {
        add_default($test_files, $nl_flags->{'inputdata_rootdir'}, $definition, $defaults, $nl, $var,'use_fates'=>$nl_flags->{'use_fates'});

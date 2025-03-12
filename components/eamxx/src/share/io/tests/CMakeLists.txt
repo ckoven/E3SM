@@ -7,7 +7,7 @@ BuildCprnc()
 
 ## Test scorpio interfaces
 CreateUnitTest(scorpio_interface_tests "scorpio_interface_tests.cpp"
-  LIBS scream_scorpio_interface LABELS "io"
+  LIBS eamxx_scorpio_interface LABELS "io"
   MPI_RANKS 1 ${SCREAM_TEST_MAX_RANKS}
 )
 
@@ -15,6 +15,12 @@ CreateUnitTest(scorpio_interface_tests "scorpio_interface_tests.cpp"
 CreateUnitTest(io_utils "io_utils.cpp"
   LIBS scream_io LABELS io
   PROPERTIES RESOURCE_LOCK rpointer_file
+)
+
+# Test creation of diagnostic from diag_field_name
+CreateUnitTest(create_diag "create_diag.cpp"
+  LIBS diagnostics scream_io
+  LABELS io diagnostics
 )
 
 ## Test basic output (no packs, no diags, all avg types, all freq units)
@@ -79,5 +85,11 @@ endforeach()
 ## Test remap output
 CreateUnitTest(io_remap_test "io_remap_test.cpp"
   LIBS scream_io diagnostics LABELS io remap
+  MPI_RANKS 1 ${SCREAM_TEST_MAX_RANKS}
+)
+
+## Test single-column reader
+CreateUnitTest(io_scm_reader "io_scm_reader.cpp"
+  LIBS scream_io LABELS io
   MPI_RANKS 1 ${SCREAM_TEST_MAX_RANKS}
 )

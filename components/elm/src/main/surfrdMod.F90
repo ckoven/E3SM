@@ -20,11 +20,6 @@ module surfrdMod
   use ncdio_pio       , only : ncd_io, check_var, ncd_inqfdims, check_dim, ncd_inqdid, ncd_inqdlen
   use pio
 
-#ifdef HAVE_MOAB
-  use mct_mod         , only : mct_gsMap
-  use decompMod       , only : get_elmlevel_gsmap
-  ! use spmdMod         , only : iam  ! rank on the land communicator
-#endif
   use spmdMod                         
   use topounit_varcon , only : max_topounits, has_topounit  
 
@@ -184,11 +179,6 @@ contains
 
     ! pflotran:beg-----------------------------
     integer :: j, np, nv
-#ifdef HAVE_MOAB
-    type(mct_gsMap),  pointer :: gsMap
-    integer :: i, iv , iseg, ig, local ! ni, nj, nv, nseg, global ig
-
-#endif
 
     ! pflotran:end-----------------------------
     character(len=32) :: subname = 'surfrd_get_grid'     ! subroutine name
@@ -258,59 +248,6 @@ contains
 
        end if
        ! pflotran:end-----------------------------------------------
-
-#ifdef HAVE_MOAB
-       ! read xv and yv for MOAB to learn mesh verticies
-       if (ldomain%nv>=3 ) then
-          call get_elmlevel_gsmap (grlnd, gsMap)
-          allocate(rdata3d(nv,ni,nj))  ! transpose from c, as this is fortran
-          vname = 'xv'
-          ! this should be improved in a distributed read, that does not use full grid ni * nj * nv 720*360*4*8 ~ 8Mb
-          call ncd_io(ncid=ncid, varname=trim(vname), data=rdata3d, flag='read', readvar=readvar)
-          if (.not. readvar) call endrun( msg=trim(subname)//' ERROR: xv  NOT on file'//errMsg(__FILE__, __LINE__))
-          ! fill up the ldomain%mblonv(begg:endg, 1:nv) array
-          local = begg
-          do iseg = 1, gsMap%ngseg
-             if (gsMap%pe_loc(iseg) .eq. iam) then
-                do ig = gsMap%start(iseg), gsMap%start(iseg) + gsMap%length(iseg) - 1
-                   j = (ig-1)/ni + 1
-                   i = ig - ni*(j-1)
-                   do iv = 1, nv
-                      if (local .le. endg) then
-                         ldomain%mblonv(local, iv ) = rdata3d(iv, i, j)
-                      else
-                         write (iulog, *), 'OVERFLOW', iseg, gsMap%pe_loc(iseg), gsMap%start(iseg), gsMap%length(iseg), local
-                      endif
-                   enddo
-                   local = local + 1
-                enddo
-             endif
-          enddo
-          ! repeat for mblatv
-          vname = 'yv'
-          call ncd_io(ncid=ncid, varname=trim(vname), data=rdata3d, flag='read', readvar=readvar)
-          if (.not. readvar) call endrun( msg=trim(subname)//' ERROR: yv  NOT on file'//errMsg(__FILE__, __LINE__))
-          ! fill up the ldomain%lonv(begg:endg, 1:nv) array
-          local = begg
-          do iseg = 1, gsMap%ngseg
-             if (gsMap%pe_loc(iseg) .eq. iam) then
-                do ig = gsMap%start(iseg), gsMap%start(iseg) + gsMap%length(iseg) - 1
-                   j = (ig-1)/ni + 1
-                   i = ig - ni*(j-1)
-                   do iv = 1, nv
-                       if (local .le. endg) then
-                          ldomain%mblatv(local, iv ) = rdata3d(iv, i, j)
-                       endif
-                   enddo
-                   local = local + 1
-                enddo
-             endif
-          enddo
-          ! deallocate what is not needed anymore (for half degree land model, ~8Mb)
-          deallocate(rdata3d)
-
-       end if
-#endif
     else
        call ncd_io(ncid=ncid, varname= 'AREA', flag='read', data=ldomain%area, &
             dim1name=grlnd, readvar=readvar)
@@ -1105,6 +1042,8 @@ contains
     end if
     fert_p_cft = 0.0_r8
 
+    wt_nat_patch(begg:endg, :, :) = 0.0_r8
+    wt_cft(begg:endg, :, :) = 0.0_r8
     if (.not. create_crop_landunit) then
        call ncd_io(ncid=ncid, varname='PCT_NAT_PFT', flag='read', data=wt_nat_patch, &
             dim1name=grlnd, readvar=readvar)
@@ -1263,6 +1202,8 @@ contains
 
        do nl = begg,endg
           do t = 1, max_topounits
+            ! (TODO) the following assumes that rainfed/irrigated crop are ordered side by side
+            ! indexing is fixed
             wt_cft(nl,t,nc3crop)       = wt_cft(nl,t,nc3crop)  + wt_cft(nl,t,nc3irrig)
             wt_cft(nl,t,nc3irrig)      = 0._r8
             wt_cft(nl,t,ncorn)         = wt_cft(nl,t,ncorn)    + wt_cft(nl,t,ncornirrig)
@@ -1702,7 +1643,12 @@ contains
 
     call ncd_io(ncid=ncid, varname='STDEV_ELEV', flag='read', data=domain%stdev_elev, &
          dim1name=grlnd, readvar=readvar)
-    if (.not. readvar) call endrun( trim(subname)//' ERROR: STDEV_ELEV  NOT on fsurdat file' )
+    if (.not. readvar) then
+         write(iulog,*) trim(subname),' WARNING: STDEV_ELEV  NOT on fsurdat file. Try to use STD_ELEV instead.'
+         call ncd_io(ncid=ncid, varname='STD_ELEV', flag='read', data=domain%stdev_elev, &
+              dim1name=grlnd, readvar=readvar)
+         if (.not. readvar) call endrun( trim(subname)//' ERROR: BOTH STD_ELEV and STDEV_ELEV NOT on fsurdat file' )
+    endif
     call ncd_io(ncid=ncid, varname='SKY_VIEW', flag='read', data=domain%sky_view, &
          dim1name=grlnd, readvar=readvar)
     if (.not. readvar) call endrun( trim(subname)//' ERROR: SKY_VIEW  NOT on fsurdat file' )

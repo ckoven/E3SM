@@ -55,6 +55,7 @@ module controlMod
   use elm_varctl              , only: const_climate_hist
   use elm_varctl              , only: use_top_solar_rad
   use elm_varctl              , only: snow_shape, snicar_atm_type, use_dust_snow_internal_mixing
+  use EcosystemBalanceCheckMod, only: bgc_balance_check_tolerance => balance_check_tolerance
 
   !
   ! !PUBLIC TYPES:
@@ -181,6 +182,10 @@ contains
     namelist /elm_inparm/ &
          NFIX_PTASE_plant
 
+    ! BGC balance check
+    namelist /elm_inparm/ &
+         bgc_balance_check_tolerance
+
     ! For experimental manipulations
     namelist /elm_inparm/ &
          startdate_add_temperature
@@ -267,6 +272,16 @@ contains
           fates_parteh_mode,                            &
           fates_seeddisp_cadence,                       &
           use_fates_tree_damage,                        &
+          use_fates_daylength_factor,                   &
+          fates_photosynth_acclimation,                 &
+          fates_stomatal_model,                         &
+          fates_stomatal_assimilation,                  &
+          fates_leafresp_model,                         &
+          fates_cstarvation_model,                      &
+          fates_regeneration_model,                     &
+          fates_hydro_solver,                           &
+          fates_radiation_model,                        &
+          fates_electron_transport_model,               &
           fates_history_dimlevel
 
     namelist /elm_inparm / use_betr
@@ -308,6 +323,9 @@ contains
        lateral_connectivity, domain_decomp_type
 
     namelist /elm_inparm/ &
+         use_IM2_hillslope_hydrology
+
+    namelist /elm_inparm/ &
          use_petsc_thermal_model
 
     namelist /elm_inparm/ &
@@ -325,7 +343,7 @@ contains
 
     namelist /elm_mosart/ &
          lnd_rof_coupling_nstep
-		 
+
     namelist /elm_inparm/ &
          snow_shape, snicar_atm_type, use_dust_snow_internal_mixing 
     
@@ -796,6 +814,7 @@ contains
     call mpi_bcast (forest_fert_exp, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (ECA_Pconst_RGspin, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (NFIX_PTASE_plant, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (bgc_balance_check_tolerance, 1, MPI_REAL8, 0, mpicom, ier)
     call mpi_bcast (use_pheno_flux_limiter, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (startdate_add_temperature, 1, MPI_CHARACTER, 0, mpicom, ier)
     call mpi_bcast (startdate_add_co2, 1, MPI_CHARACTER, 0, mpicom, ier)
@@ -823,6 +842,16 @@ contains
     call mpi_bcast (use_fates_potentialveg, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fates_ed_prescribed_phys,  1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_fates_inventory_init, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (use_fates_daylength_factor, 1, MPI_LOGICAL, 0, mpicom, ier)
+    call mpi_bcast (fates_photosynth_acclimation, len(fates_photosynth_acclimation), MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_stomatal_model, len(fates_stomatal_model) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_stomatal_assimilation, len(fates_stomatal_assimilation) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_leafresp_model, len(fates_leafresp_model) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_cstarvation_model, len(fates_cstarvation_model) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_regeneration_model, len(fates_regeneration_model) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_hydro_solver, len(fates_hydro_solver) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_radiation_model, len(fates_radiation_model) , MPI_CHARACTER, 0, mpicom, ier)
+    call mpi_bcast (fates_electron_transport_model, len(fates_electron_transport_model) , MPI_CHARACTER, 0, mpicom, ier)
     call mpi_bcast (fates_inventory_ctrl_filename, len(fates_inventory_ctrl_filename), &
           MPI_CHARACTER, 0, mpicom, ier)
     call mpi_bcast (fates_parteh_mode, 1, MPI_INTEGER, 0, mpicom, ier)
@@ -937,6 +966,9 @@ contains
     call mpi_bcast (lateral_connectivity, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (domain_decomp_type, len(domain_decomp_type), MPI_CHARACTER, 0, mpicom, ier)
 
+    ! hillslope connectivity via topounits
+    call mpi_bcast (use_IM2_hillslope_hydrology, 1, MPI_LOGICAL, 0, mpicom, ier)
+
     ! bgc & pflotran interface
     call mpi_bcast (use_elm_interface, 1, MPI_LOGICAL, 0, mpicom, ier)
     call mpi_bcast (use_elm_bgc, 1, MPI_LOGICAL, 0, mpicom, ier)
@@ -1048,6 +1080,7 @@ contains
     write(iulog,*) '    use_mexicocity = ', use_mexicocity
     write(iulog,*) '    use_noio = ', use_noio
     write(iulog,*) '    use_betr = ', use_betr
+    write(iulog,*) '    use_IM2_hillslope_hydrology = ', use_IM2_hillslope_hydrology
     write(iulog,*) '    use_atm_downscaling_to_topunit = ', use_atm_downscaling_to_topunit
     write(iulog,*) '    precip_downscaling_method = ', precip_downscaling_method
     write(iulog,*) 'input data files:'
@@ -1245,6 +1278,16 @@ contains
        write(iulog, *) '    use_fates_luh = ', use_fates_luh
        write(iulog, *) '    use_fates_lupft = ', use_fates_lupft
        write(iulog, *) '    use_fates_potentialveg = ', use_fates_potentialveg
+       write(iulog, *) '    use_fates_daylength_factor = ', use_fates_daylength_factor
+       write(iulog, *) '    fates_photosynth_acclimation = ', trim(fates_photosynth_acclimation)
+       write(iulog, *) '    fates_stomatal_model = ', fates_stomatal_model
+       write(iulog, *) '    fates_stomatal_assimilation = ', fates_stomatal_assimilation
+       write(iulog, *) '    fates_leafresp_model = ', fates_leafresp_model
+       write(iulog, *) '    fates_cstarvation_model = ', fates_cstarvation_model
+       write(iulog, *) '    fates_regeneration_model = ', fates_regeneration_model
+       write(iulog, *) '    fates_hydro_solver = ', fates_hydro_solver
+       write(iulog, *) '    fates_radiation_model = ', fates_radiation_model
+       write(iulog, *) '    fates_electron_transport_model = ', fates_electron_transport_model
        write(iulog, *) '    fates_inventory_ctrl_filename = ',fates_inventory_ctrl_filename
        write(iulog, *) '    fates_seeddisp_cadence = ', fates_seeddisp_cadence
        write(iulog, *) '    fates_seeddisp_cadence: 0, 1, 2, 3 => off, daily, monthly, or yearly dispersal'

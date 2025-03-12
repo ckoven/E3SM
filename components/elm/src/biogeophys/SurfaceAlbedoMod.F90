@@ -937,7 +937,7 @@ contains
 #ifndef _OPENACC
 
        call alm_fates%wrap_canopy_radiation(bounds,surfalb_vars,nextsw_cday,declinp1)
-       
+
 #endif
     else
     
