@@ -653,6 +653,16 @@
    </compset>
 
    <compset>
+    <alias>I1850TRENDY2025</alias>
+    <lname>1850_DATM%TRNDY25_ELM%CNPRDCTCBCTOP_SICE_SOCN_MOSART_SGLC_SWAV</lname>
+   </compset>
+
+   <compset>
+    <alias>I20TRTRENDY2025</alias>
+    <lname>20TR_DATM%TRNDY25_ELM%CNPRDCTCBCTOP_SICE_SOCN_MOSART_SGLC_SWAV</lname>
+   </compset>
+
+   <compset>
      <alias>I20TRGSWCNRDCTCBC</alias>
      <lname>20TR_DATM%GSWP3v1_ELM%CNRDCTCBC_SICE_SOCN_MOSART_SGLC_SWAV</lname>
    </compset>
