@@ -688,7 +688,7 @@
       <value  stream="CLMCRUNCEPv7.Solar">clmforc.cruncep.V7.c2016.0.5d.Solr.%ym.nc</value>
       <value  stream="CLMCRUNCEPv7.Precip">clmforc.cruncep.V7.c2016.0.5d.Prec.%ym.nc</value>
       <value  stream="CLMCRUNCEPv7.TPQW">clmforc.cruncep.V7.c2016.0.5d.TPQWL.%ym.nc</value>
-      <value  stream="TRENDY2025.Solar">clmforc.CRUJRAv3_0.5x0.5.Solr.%y.nc</value>
+      <value  stream="TRENDY2025.Solar">clmforc.CRUJRAv3_0.5x0.5.Solr_Diffuse.%y.nc</value>
       <value  stream="TRENDY2025.Precip">clmforc.CRUJRAv3_0.5x0.5.Prec.%y.nc</value>
       <value  stream="TRENDY2025.TPQW">clmforc.CRUJRAv3_0.5x0.5.TPQWL.%y.nc</value>
       <value  stream="CLMGSWP3v1.Solar">clmforc.GSWP3.c2011.0.5x0.5.Solr.%ym.nc</value>
@@ -1729,7 +1729,8 @@
         PSRF     pbot
       </value>
       <value  stream="TRENDY2025.Solar">
-        FSDS swdn
+	FSDS_DIRECT  swdndr
+	FSDS_DIFFUSE swdndf
       </value>
       <value  stream="TRENDY2025.Precip">
         PRECTmms precn
