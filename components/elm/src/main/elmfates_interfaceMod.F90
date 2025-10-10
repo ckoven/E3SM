@@ -71,6 +71,7 @@ module ELMFatesInterfaceMod
    use elm_varctl        , only : fates_electron_transport_model
    use elm_varctl        , only : flandusepftdat
    use elm_varctl        , only : use_fates_tree_damage
+   use clm_varctl        , only : use_fates_edge_forest
    use elm_varctl        , only : nsrest, nsrBranch
    use elm_varctl        , only : fates_inventory_ctrl_filename
    use elm_varctl        , only : fates_history_dimlevel
@@ -425,6 +426,7 @@ contains
      integer                                        :: pass_num_lu_harvest_cats
      integer                                        :: pass_lu_harvest
      integer                                        :: pass_tree_damage
+     integer                                        :: pass_edge_forest
      integer                                        :: pass_use_potentialveg     
      integer                                        :: pass_num_luh_states
      integer                                        :: pass_num_luh_transitions
@@ -485,6 +487,13 @@ contains
            pass_tree_damage = 0
         end if
         call set_fates_ctrlparms('use_tree_damage',ival=pass_tree_damage)
+
+        if (use_fates_edge_forest) then
+           pass_edge_forest = 1
+        else
+           pass_edge_forest = 0
+        end if
+        call set_fates_ctrlparms('use_edge_forest',ival=pass_edge_forest)
         
         if((trim(nu_com)=='ECA') .or. (trim(nu_com)=='MIC')) then
            call set_fates_ctrlparms('nu_com',cval='ECA')
@@ -3261,6 +3270,7 @@ end subroutine wrap_update_hifrq_hist
    use FatesIOVariableKindMod, only : site_can_r8, site_cnlf_r8, site_cnlfpft_r8
    use FatesIOVariableKindMod, only : site_cdpf_r8, site_cdsc_r8, site_cdam_r8
    use FatesIOVariableKindMod, only : site_landuse_r8, site_lulu_r8
+   use FatesIOVariableKindMod, only : site_edgebin_r8
    use FatesIODimensionsMod, only : fates_bounds_type
 
 
@@ -3362,7 +3372,7 @@ end subroutine wrap_update_hifrq_hist
              site_scagpft_r8, site_agepft_r8, site_elem_r8, site_elpft_r8, &
              site_elcwd_r8, site_elage_r8, site_coage_r8, site_coage_pft_r8, &
              site_agefuel_r8,site_cdsc_r8, site_cdpf_r8, site_cdam_r8, &
-             site_landuse_r8, site_lulu_r8)
+             site_landuse_r8, site_lulu_r8, site_edgebin_r8)
 
            d_index = fates_hist%dim_kinds(dk_index)%dim2_index
            dim2name = fates_hist%dim_bounds(d_index)%name
@@ -3620,6 +3630,7 @@ end subroutine wrap_update_hifrq_hist
 
    use FatesIODimensionsMod, only : fates_bounds_type
    use FatesInterfaceTypesMod, only : nlevsclass_fates => nlevsclass
+   use FatesInterfaceTypesMod, only : nlevedgeforest_fates => nlevedgeforest
    use FatesInterfaceTypesMod, only : nlevage_fates    => nlevage
    use FatesInterfaceTypesMod, only : nlevheight_fates => nlevheight
    use FatesInterfaceTypesMod, only : nlevdamage_fates => nlevdamage
@@ -3656,6 +3667,9 @@ end subroutine wrap_update_hifrq_hist
 
    fates%age_class_begin = 1
    fates%age_class_end = nlevage_fates
+
+   fates%edgeforest_class_begin = 1
+   fates%edgeforest_class_end = nlevedgeforest_fates
 
    fates%sizeage_class_begin = 1
    fates%sizeage_class_end   = nlevsclass_fates * nlevage_fates
